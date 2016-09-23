@@ -11,8 +11,10 @@ import org.apache.commons.cli.Option;
 import org.apache.commons.cli.Options;
 import org.apache.commons.cli.ParseException;
 
-import com.wpl.xrapc.XrapClient;
+import com.wpl.xrapc.XrapPeer;
 import com.wpl.xrapc.XrapException;
+import org.zeromq.ZContext;
+import org.zeromq.ZMQ;
 
 /**
  * General purpose command line XRAP tool, a bit like cURL.
@@ -23,6 +25,7 @@ import com.wpl.xrapc.XrapException;
  * @author tomq
  */
 public class XrapClientTool {
+	private ZContext ctx;
 	public static void main(String[] args) {
 		try {
 			new XrapClientTool(args).run();
@@ -51,6 +54,7 @@ public class XrapClientTool {
 	
 	
 	public XrapClientTool(String[] args) throws UsageException {
+		ctx = new ZContext();
 		command = parseArgs(args);
 	}
 	
@@ -136,8 +140,7 @@ public class XrapClientTool {
 	}
 	
 	public void run() throws XrapException, UsageException, IOException, InterruptedException {
-		XrapClient client = new XrapClient(
-				String.format("tcp://%s:%d", host, port));
+		XrapPeer client = new XrapPeer(host, port,true, ZContext.shadow(ctx));
 		client.setTimeout(timeoutSeconds);
 		
 		if (command.needsBody()) {

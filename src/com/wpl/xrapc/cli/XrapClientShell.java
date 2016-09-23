@@ -2,7 +2,10 @@ package com.wpl.xrapc.cli;
 
 import java.io.IOException;
 import java.io.PrintWriter;
+import java.lang.management.ManagementFactory;
+import java.lang.management.ThreadMXBean;
 
+import com.wpl.xrapc.*;
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.CommandLineParser;
 import org.apache.commons.cli.DefaultParser;
@@ -11,24 +14,54 @@ import org.apache.commons.cli.Option;
 import org.apache.commons.cli.Options;
 import org.apache.commons.cli.ParseException;
 
-import com.wpl.xrapc.XrapClient;
-import com.wpl.xrapc.XrapException;
+import com.wpl.xrapc.XrapPeer;
 
 import jline.console.ConsoleReader;
+import org.slf4j.LoggerFactory;
+import org.slf4j.Logger;
+import org.zeromq.ZContext;
+import org.zeromq.ZMQ;
+
+import static sun.misc.ThreadGroupUtils.getRootThreadGroup;
 
 public class XrapClientShell {
+	static Logger log;
+	private ZMQ.Socket signal;
+	private ZContext ctx;
+	private Thread xrapClient;
+
+	private static  Thread[] getAllThreads( ) {
+		final ThreadGroup root = getRootThreadGroup( );
+		final ThreadMXBean thbean = ManagementFactory.getThreadMXBean( );
+		int nAlloc = thbean.getThreadCount( );
+		int n = 0;
+		Thread[] threads;
+		do {
+			nAlloc *= 2;
+			threads = new Thread[ nAlloc ];
+			n = root.enumerate( threads, true );
+		} while ( n == nAlloc );
+		return java.util.Arrays.copyOf( threads, n );
+	}
 	public static void main(String[] args) {
+		log = LoggerFactory.getLogger(XrapClientShell.class);
 		try {
+			log.info("starting XrapClientShell\n");
 			new XrapClientShell(args).run();
+			log.info("XrapClientShell terminated\n");
 		}
 		catch (UsageException ex) {
-			System.err.println(ex.getMessage());
+			log.error(ex.getMessage());
 			HelpFormatter formatter = new HelpFormatter();
 			formatter.printHelp("xrapc", buildCommandLineOptions(), true);
 		}
 		catch (IOException ex) {
-			System.err.println(ex.getMessage());
+			log.error(ex.getMessage());
 		}
+		for (Thread t: getAllThreads()) {
+			log.info("Thread : " + t);
+		}
+
 	}
 	
 	private static Options buildCommandLineOptions() {
@@ -42,43 +75,62 @@ public class XrapClientShell {
 					.hasArg(true)
 					.type(Number.class)
 					.build());
+		options.addOption(
+				Option.builder("c")
+						.longOpt("client")
+						.desc("Connect rather than bind")
+						.hasArg(false)
+						.type(Boolean.class)
+						.build());
+	//	log.info("options: " + options.toString());
 		return options;
 	}
 	
 	private String host;
 	private int port;
 	private int timeoutSeconds;
-	private XrapClient client;
-	
+	private XrapPeer client;
+	private boolean isServer = true;
+
 	public XrapClientShell(String[] args) throws UsageException {
 		parseArgs(args);
-		client = new XrapClient(
-					String.format("tcp://%s:%d", host, port));
+		this.port = 7777;
+		this.host = "127.0.0.1";
+		this.timeoutSeconds = 5;
+		ctx = new ZContext();
+		client = new XrapPeer(host,port, isServer, ZContext.shadow(ctx));
 		client.setTimeout(timeoutSeconds);
+
+		client.addHandler(new TestResource());
+
+		log.info("Creating signal socket\n");
+		signal = ctx.createSocket(ZMQ.PAIR);
+		log.info("Connecting signal socket\n");
+		signal.bind("tcp://127.0.0.1:9999");
 	}
 	
 	private void parseArgs(String[] args) throws UsageException {
+		log.info("parseArgs, args: "+ args.toString());
 		try {
 			CommandLineParser parser = new DefaultParser();
 			Options options = buildCommandLineOptions();
 			CommandLine cmd = parser.parse(options, args);
 			
 			String[] remainingArgs = cmd.getArgs();
-			if (remainingArgs.length!=1) {
-				throw new UsageException("Must supply host:port");
+
+			for (String str: cmd.getArgList()){
+				log.info("CommandLineParser: " + str);
 			}
-			
-			String hostAndPort = remainingArgs[0];
-			int colonPos = hostAndPort.indexOf(':');
-			if (colonPos==-1) {
-				throw new UsageException("Port number required");
-			}
-			this.host = hostAndPort.substring(0, colonPos);
-			this.port = Utils.parsePort(hostAndPort.substring(colonPos+1));
-			
 			Number timeoutArg = (Number)cmd.getParsedOptionValue("timeout");
 			if (timeoutArg!=null) {
 				timeoutSeconds = timeoutArg.intValue();
+			}
+
+				if(cmd.hasOption('c')){
+				log.info ("I am client");
+				isServer = false;
+			} else {
+				log.info ("I am server");
 			}
 		}
 		catch (ParseException ex) {
@@ -87,7 +139,10 @@ public class XrapClientShell {
 	}
 	
 	private void run() throws IOException {
-		
+		log.warn("XrapClientShell -> starting client\n");
+		xrapClient = new Thread(client);
+		xrapClient.start();
+		log.warn("XrapClientShell -> client started\n");
 		ConsoleReader reader = new ConsoleReader();
 		try {
 			PrintWriter out = new PrintWriter(reader.getOutput());
@@ -121,8 +176,20 @@ public class XrapClientShell {
 			}
 		}
 		finally {
+			log.info("Signaling client..\n");
+			signal.send("$TERM",0);
+			//signal.close();
+			ctx.destroy();
+			log.info("Terminating reader..\n");
 			reader.shutdown();
+			try {
+				log.info("Waiting for termination of xrapClient thread..\n");
+				xrapClient.join();
+			} catch (InterruptedException e) {
+				e.printStackTrace();
+			}
 		}
+		ctx.destroy();
 	}
 	
 	private boolean parseLine(String commandString) throws UsageException, XrapException, InterruptedException {
@@ -157,7 +224,9 @@ public class XrapClientShell {
 		
 		command.run(client);
 	}
-	
+
+
+
 	static class CommandTokenizer {
 		char[] line;
 		int pos;

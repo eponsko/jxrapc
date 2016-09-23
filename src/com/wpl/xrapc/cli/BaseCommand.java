@@ -9,13 +9,10 @@ import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 
+import com.wpl.xrapc.*;
 import org.json.simple.JSONObject;
 
-import com.wpl.xrapc.NameValuePair;
-import com.wpl.xrapc.XrapClient;
-import com.wpl.xrapc.XrapException;
-import com.wpl.xrapc.XrapReply;
-import com.wpl.xrapc.XrapRequest;
+import com.wpl.xrapc.XrapPeer;
 
 /**
  * Base class representing a "command" in the command line interface.
@@ -56,8 +53,8 @@ abstract class BaseCommand {
 	protected List<HeaderItem> headerItems = new ArrayList<HeaderItem>();
 	protected List<Item> dataItems = new ArrayList<Item>();
 	protected byte[] body;
-	protected boolean printRequestHeader=false;
-	protected boolean printRequestBody=false;
+	protected boolean printRequestHeader=true;
+	protected boolean printRequestBody=true;
 	protected boolean printResponseHeader=true;
 	protected boolean printResponseBody=true;
 	
@@ -144,7 +141,7 @@ abstract class BaseCommand {
 	/**
 	 * Runs the command using the given XrapClient object.
 	 */
-	public void run(XrapClient client) throws UsageException, XrapException, InterruptedException {
+	public void run(XrapPeer client) throws UsageException, XrapException, InterruptedException {
 		XrapRequest request = buildRequest();
 		if (printRequestHeader || printRequestBody)
 			System.out.println("\n\n");
@@ -197,34 +194,11 @@ abstract class BaseCommand {
 	
 	private void printReply(XrapReply reply) {
 		if (printResponseHeader) {
-			System.out.println(reply.statusCode);
-			if (reply.errorText!=null) 
-				System.out.println(reply.errorText);
-			
-			if (reply.contentType!=null) {
-				System.out.printf("Content-type: %s%n", reply.contentType);
-			}
-			if (reply.dateModified!=0) {
-				System.out.printf("Date-Modified: %tc%n", new Date(reply.dateModified));
-			}
-			if (reply.etag!=null) {
-				System.out.printf("ETag: %s%n", reply.etag);
-			}
-			if (reply.location!=null) {
-				System.out.printf("Location: %s%n", reply.location);
-			}
-			
-			if (reply.metadata!=null) {
-				for (NameValuePair nvp : reply.metadata) {
-					System.out.printf("%s : %s%n",  nvp.getName(), nvp.getStringValue());
-				}
-			}
+			System.out.println(reply.toString());
 			System.out.println();
 		}
 		
-		if (reply.body!=null && printResponseBody) {
-			printBody(reply.body);
-		}
+
 	}
 	
 	protected void printBody(byte[] body) {

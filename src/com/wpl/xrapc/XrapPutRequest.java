@@ -22,6 +22,23 @@ public class XrapPutRequest extends XrapRequest {
 	public XrapPutRequest(String resource) {
 		super(resource);
 	}
+	public XrapPutRequest() {
+	}
+
+	public String toString() {
+		StringBuilder sb = new StringBuilder();
+		if(ifUnmodifiedSince != null)
+			sb.append("If-Unmodified-Since: " + ifUnmodifiedSince.toString() + "\n");
+		if(ifMatch != null)
+			sb.append("If-Match: " + ifMatch + "\n");
+		if(contentType != null)
+			sb.append("Content-Type: " + contentType + "\n");
+		if(contentBody != null)
+			sb.append("Content-Body: " +  new String(contentBody) + "\n");
+
+		sb.append("Type: PUT\n");
+		return super.toString() + sb.toString();
+	}
 
 	/** 
 	 * Sets the content type of the body being sent.
@@ -123,13 +140,13 @@ public class XrapPutRequest extends XrapRequest {
 			return readErrorResponse(buffer);
 		}
 		else if (command==Constants.PUT_OK_COMMAND) {
-			XrapReply response = new XrapReply();
-			response.requestId = buffer.getInt();
-			response.statusCode = buffer.getShort();
-			response.location = readString(buffer);
-			response.etag = readString(buffer);
-			response.dateModified = buffer.getLong();
-			response.metadata = readHash(buffer);
+			XrapPutReply response = new XrapPutReply();
+			response.setRequestId(buffer.getInt());
+			response.setStatusCode( buffer.getShort());
+			response.setLocation( readString(buffer));
+			response.setEtag( readString(buffer));
+			response.setDateModified( buffer.getLong());
+			response.setMetadata(readHash(buffer));
 			return response;
 		}
 		else {

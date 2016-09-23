@@ -9,7 +9,7 @@ import java.util.Date;
  * Represents a DELETE request sent to an XRAP server.
  * @author tomq
  */
-public class XrapDeleteRequest extends XrapRequest {
+public class XrapDeleteRequest extends com.wpl.xrapc.XrapRequest {
 	private Date ifUnmodifiedSince;
 	private String ifMatch;
 	
@@ -20,7 +20,18 @@ public class XrapDeleteRequest extends XrapRequest {
 	public XrapDeleteRequest(String resource) {
 		super(resource);
 	}
+	public XrapDeleteRequest() {
+	}
+	public String toString() {
+		StringBuilder sb = new StringBuilder();
+		if(ifUnmodifiedSince != null)
+			sb.append("If-Unmodified-Since: " + ifUnmodifiedSince.toString() + "\n");
+		if(ifMatch != null)
+			sb.append("If-Match: " + ifMatch + "\n");
+		sb.append("Type: DELETE\n");
 
+		return super.toString() + sb.toString();
+	}
 	/**
 	 * Performs a conditional DELETE based on modification date. 
 	 * The server can return a "412 Precondition Failed" 
@@ -86,10 +97,10 @@ public class XrapDeleteRequest extends XrapRequest {
 			return readErrorResponse(buffer);
 		}
 		else if (command==Constants.DELETE_OK_COMMAND) {
-			XrapReply response = new XrapReply();
-			response.requestId = buffer.getInt();
-			response.statusCode = buffer.getShort(); 
-			response.metadata = readHash(buffer);
+			XrapDeleteReply response = new XrapDeleteReply();
+			response.setRequestId(buffer.getInt());
+			response.setStatusCode( buffer.getShort());
+			response.setMetadata(readHash(buffer));
 			return response;
 		}
 		else {

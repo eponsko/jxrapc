@@ -18,6 +18,21 @@ public class XrapGetRequest extends XrapRequest {
 	private String contentType;
 	private List<Parameter> parameters = new ArrayList<Parameter>();
 
+	public String toString(){
+		StringBuilder sb = new StringBuilder();
+		if(ifModifiedSince != null)
+			sb.append("If-Modified-Since: " + ifModifiedSince.toString() + "\n");
+		if(ifNoneMatch != null)
+			sb.append("If-None-Match: " + ifNoneMatch +"\n");
+		if(contentType != null)
+			sb.append("Content-Type: " + contentType + "\n");
+		if(parameters != null)
+			for (Parameter p: parameters) {
+				sb.append("Parameter: " + p.name + " = " + p.value + "\n");
+			}
+		sb.append("Type: GET\n");
+		return super.toString() + sb.toString();
+	}
 	/**
 	 * Constructs a new GET request.
 	 * @param resource The resource to GET. This is a string of the form /a/b/c
@@ -25,7 +40,9 @@ public class XrapGetRequest extends XrapRequest {
 	public XrapGetRequest(String resource) {
 		super(resource);
 	}
-	
+	public XrapGetRequest() {
+
+	}
 	/**
 	 * Performs a conditional GET based on modification date. 
 	 * The server can return a "304 Not Modified" with no content 
@@ -264,32 +281,28 @@ public class XrapGetRequest extends XrapRequest {
 			return readErrorResponse(buffer);
 		}
 		else if (command==Constants.GET_EMPTY_COMMAND) {
-			XrapReply response = new XrapReply();
-			response.requestId = buffer.getInt();
-			response.statusCode = buffer.getShort();
+			XrapGetEmptyReply response = new XrapGetEmptyReply();
+			response.setRequestId(buffer.getInt());
+			response.setStatusCode(buffer.getShort());
 			return response;
 		}
 		else if (command==Constants.GET_OK_COMMAND) {
-			XrapReply response = new XrapReply();
-			response.requestId = buffer.getInt();
-			response.statusCode = buffer.getShort(); 
-			response.etag = readString(buffer);
-			response.dateModified = buffer.getLong();
-			response.contentType = readString(buffer);
-			response.body = readLongBinaryString(buffer);
-			response.metadata = readHash(buffer);
+			XrapGetReply response = new XrapGetReply();
+			response.setRequestId( buffer.getInt());
+			response.setStatusCode(buffer.getShort());
+			response.setEtag( readString(buffer));
+			response.setDateModified( buffer.getLong());
+			response.setContentType( readString(buffer));
+			response.setBody( readLongBinaryString(buffer));
+			response.setMetadata(readHash(buffer));
 			return response;
 		}
 		else {
+			System.out.println("Got unknown command: " + command + "\n");
 			throw new UnknownResponseCodeException("GET", command);
 		}
 	}
 	
-	private void writeParameter(DataOutputStream dos, Parameter p) throws IOException {
-		writeString(dos, p.getName());
-		if (p.isBinary()) writeLongString(dos, p.getBinaryValue());
-		else writeLongString(dos, p.getStringValue());
-	}
-	
+
 	
 }

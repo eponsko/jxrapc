@@ -35,9 +35,11 @@ class GetCommand extends BaseCommand {
 		}
 		
 		for (Item itm : dataItems) {
-			if (itm.value instanceof String)
-				request.addParameter(itm.name, (String)itm.value);
-			throw new UsageException(String.format("GET only supports string data items (%s)", itm.name));
+			if (itm.value instanceof String) {
+				request.addParameter(itm.name, (String) itm.value);
+			} else {
+				throw new UsageException(String.format("GET only supports string data items (%s)", itm.name));
+			}
 		}
 		
 		printRequest(request);
