@@ -1,26 +1,19 @@
 package com.wpl.xrapc.cli;
 
+import com.wpl.xrapc.XrapException;
+import com.wpl.xrapc.XrapPeer;
+
+import jline.console.ConsoleReader;
+import org.apache.commons.cli.*;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.zeromq.ZContext;
+import org.zeromq.ZMQ;
+
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.lang.management.ManagementFactory;
 import java.lang.management.ThreadMXBean;
-
-import com.wpl.xrapc.*;
-import org.apache.commons.cli.CommandLine;
-import org.apache.commons.cli.CommandLineParser;
-import org.apache.commons.cli.DefaultParser;
-import org.apache.commons.cli.HelpFormatter;
-import org.apache.commons.cli.Option;
-import org.apache.commons.cli.Options;
-import org.apache.commons.cli.ParseException;
-
-import com.wpl.xrapc.XrapPeer;
-
-import jline.console.ConsoleReader;
-import org.slf4j.LoggerFactory;
-import org.slf4j.Logger;
-import org.zeromq.ZContext;
-import org.zeromq.ZMQ;
 
 import static sun.misc.ThreadGroupUtils.getRootThreadGroup;
 
@@ -46,9 +39,7 @@ public class XrapClientShell {
 	public static void main(String[] args) {
 		log = LoggerFactory.getLogger(XrapClientShell.class);
 		try {
-			log.info("starting XrapClientShell\n");
 			new XrapClientShell(args).run();
-			log.info("XrapClientShell terminated\n");
 		}
 		catch (UsageException ex) {
 			log.error(ex.getMessage());
@@ -82,6 +73,14 @@ public class XrapClientShell {
 						.hasArg(false)
 						.type(Boolean.class)
 						.build());
+		options.addOption(
+				Option.builder("d")
+						.longOpt("debug")
+						.desc("set DEBUG log level")
+						.hasArg(false)
+						.type(Boolean.class)
+						.build());
+
 	//	log.info("options: " + options.toString());
 		return options;
 	}
@@ -103,19 +102,17 @@ public class XrapClientShell {
 
 		client.addHandler(new TestResource());
 
-		log.info("Creating signal socket\n");
+		log.debug("Creating signal socket");
 		signal = ctx.createSocket(ZMQ.PAIR);
-		log.info("Connecting signal socket\n");
+		log.debug("Connecting signal socket");
 		signal.bind("tcp://127.0.0.1:9999");
 	}
 	
 	private void parseArgs(String[] args) throws UsageException {
-		log.info("parseArgs, args: "+ args.toString());
 		try {
 			CommandLineParser parser = new DefaultParser();
 			Options options = buildCommandLineOptions();
 			CommandLine cmd = parser.parse(options, args);
-			
 			String[] remainingArgs = cmd.getArgs();
 
 			for (String str: cmd.getArgList()){
@@ -126,11 +123,17 @@ public class XrapClientShell {
 				timeoutSeconds = timeoutArg.intValue();
 			}
 
-				if(cmd.hasOption('c')){
-				log.info ("I am client");
+			if(cmd.hasOption('c')){
+				log.info ("Running in Client mode");
 				isServer = false;
 			} else {
-				log.info ("I am server");
+				log.info ("Running in Server mode");
+			}
+			if(cmd.hasOption('d')){
+				log.info("Setting DEBUG loglevel");
+				// How to do this with SLF4j?
+				//Logger root = (Logger)LoggerFactory.getLogger(Logger.ROOT_LOGGER_NAME);
+
 			}
 		}
 		catch (ParseException ex) {
@@ -139,10 +142,8 @@ public class XrapClientShell {
 	}
 	
 	private void run() throws IOException {
-		log.warn("XrapClientShell -> starting client\n");
 		xrapClient = new Thread(client);
 		xrapClient.start();
-		log.warn("XrapClientShell -> client started\n");
 		ConsoleReader reader = new ConsoleReader();
 		try {
 			PrintWriter out = new PrintWriter(reader.getOutput());
@@ -176,14 +177,14 @@ public class XrapClientShell {
 			}
 		}
 		finally {
-			log.info("Signaling client..\n");
+			log.info("Sending terminate signal to XrapPeer");
 			signal.send("$TERM",0);
 			//signal.close();
 			ctx.destroy();
-			log.info("Terminating reader..\n");
+			log.info("Terminating reader..");
 			reader.shutdown();
 			try {
-				log.info("Waiting for termination of xrapClient thread..\n");
+				log.info("Waiting for termination of XrapPeer thread..");
 				xrapClient.join();
 			} catch (InterruptedException e) {
 				e.printStackTrace();

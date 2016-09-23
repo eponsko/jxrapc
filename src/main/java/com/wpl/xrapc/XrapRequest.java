@@ -104,7 +104,6 @@ public abstract class XrapRequest extends XrapMessage {
             while (numParams > 0) {
                 String name = sreadString(buffer);
                 byte[] value = sreadLongBinaryString(buffer);
-                System.out.println("Read parameter name: " + name + " value: " + value);
                 getreq.addParameter(name, new String(value));
                 numParams--;
             }

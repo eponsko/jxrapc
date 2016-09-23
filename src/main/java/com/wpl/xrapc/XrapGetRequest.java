@@ -298,7 +298,6 @@ public class XrapGetRequest extends XrapRequest {
 			return response;
 		}
 		else {
-			System.out.println("Got unknown command: " + command + "\n");
 			throw new UnknownResponseCodeException("GET", command);
 		}
 	}

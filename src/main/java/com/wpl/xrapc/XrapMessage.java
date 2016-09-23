@@ -57,7 +57,6 @@ public class XrapMessage {
             while (numParams > 0) {
                 String name = sreadString(buffer);
                 byte[] value = sreadLongBinaryString(buffer);
-                System.out.println("Read parameter name: " + name + " value: " + value);
                 getreq.addParameter(name, new String(value));
                 numParams--;
             }
@@ -178,7 +177,6 @@ public class XrapMessage {
 
     protected static NameValuePair[] readHash(ByteBuffer buffer) {
         int count = buffer.getInt();
-        System.out.println("readHash, count: " + count);
         // for each entry there is a short string and a long string
         // So the minimum number of bytes we require is count*5
         if (buffer.remaining() < count * 5) {

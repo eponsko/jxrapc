@@ -59,7 +59,7 @@ class GetCommand extends BaseCommand {
 				System.out.printf("If-None-Match : %tc%n", request.getIfNoneMatch());
 			}
 			for (XrapGetRequest.Parameter p : request.getParameters()) {
-				System.out.printf("%s = %s%n", 
+				System.out.printf("%s = %s\n",
 						p.getName(), p.getStringValue());
 			}
 		}

@@ -33,8 +33,8 @@ import java.util.concurrent.locks.ReentrantLock;
 
 public class XrapPeer implements Runnable {
 
-    static int threadnum = 1;
-    RadixTree<XrapResource> routeTrie;
+    private static int threadnum = 1;
+    private RadixTree<XrapResource> routeTrie;
     private int port;
     private String host;
     private ZMQ.Socket sockDealer, sockPush, sockSub;
@@ -128,7 +128,7 @@ public class XrapPeer implements Runnable {
         }
         try {
             lock.lock();
-            log.info("socket is: " + sock);
+            log.debug("socket is: " + sock);
             ByteBuffer bb = rep.getRouteid();
             if(bb != null) {
                 sock.send(bb.array(), ZMQ.SNDMORE);
@@ -137,7 +137,7 @@ public class XrapPeer implements Runnable {
                 sock.send(new byte[0], ZMQ.SNDMORE);
             }
             sock.send(baos.toByteArray(), 0);
-            log.info("sendReply, size: " + baos.size() );
+            log.debug("sendReply, size: " + baos.size() );
         } finally {
             lock.unlock();
         }
@@ -154,17 +154,17 @@ public class XrapPeer implements Runnable {
         if (!isServer) {
             try {
                 lock.lock();
-                log.info("sockDealer is: " + sockDealer);
+                log.debug("sockDealer is: " + sockDealer);
                 sockDealer.send(new byte[0], ZMQ.SNDMORE);
                 sockDealer.send(baos.toByteArray(), 0);
-                log.info("sendOnly, size: " + baos.size() );
+                log.debug("sendOnly, size: " + baos.size() );
             } finally {
                 lock.unlock();
             }
         } else if (!isServer) {
             try {
                 lock.lock();
-                log.info("sockRouter is: " + sockRouter);
+                log.debug("sockRouter is: " + sockRouter);
                 sockRouter.send(new byte[0], ZMQ.SNDMORE);
                 sockRouter.send(baos.toByteArray(), 0);
             } finally {
@@ -176,7 +176,7 @@ public class XrapPeer implements Runnable {
 
     private XrapReply getResponse(XrapRequest request, long timeout, TimeUnit unit) throws XrapException, InterruptedException {
         XrapReply reply;
-        log.warn("getResponse called, timeout: " + timeout + " " + unit );
+        log.debug("getResponse called, timeout: " + timeout + " " + unit );
         // There are two timeouts. We have to ensure that we return in a time
         // consistent with the timeout passed as argument. We first have to acquire the
         // lock. Another thread may have the lock, and may be waiting on a longer
@@ -188,10 +188,10 @@ public class XrapPeer implements Runnable {
             // First see whether the response has already been received, either
             // by us previously, or by another thread that might also be waiting.
             if ((reply = responseCache.remove(request.getRequestId())) != null) {
-                log.warn("getResponse: response was in cache!\n");
+                log.debug("getResponse: response was in cache!\n");
                 return reply;
             } else {
-                log.warn("getResponse: not in cache\n");
+                log.debug("getResponse: not in cache\n");
             }
             synchronized (responseCache) {
                 long loopStart = new java.util.Date().getTime();
@@ -269,9 +269,9 @@ public class XrapPeer implements Runnable {
             sockPush.bind(String.format("tcp://%s:%d", host, port + 1));
             sockPub = ctx.createSocket(ZMQ.PUB);
             sockPub.bind(String.format("tcp://%s:%d", host, port + 2));
-            log.info("Created sockRouter: " + sockRouter);
-            log.info("Created sockPush: " + sockPush);
-            log.info("Created sockPub: " + sockPub);
+            log.debug("Created sockRouter: " + sockRouter);
+            log.debug("Created sockPush: " + sockPush);
+            log.debug("Created sockPub: " + sockPub);
         } else {
             log.info("Creating XRAP peer as client, connecting to: " + String.format("tcp://%s:%d", host, port));
             // If we're client (i.e. Net2Plan), connect to
@@ -281,9 +281,9 @@ public class XrapPeer implements Runnable {
             sockPull.connect(String.format("tcp://%s:%d", host, port + 1));
             sockSub = ctx.createSocket(ZMQ.SUB);
             sockSub.connect(String.format("tcp://%s:%d", host, port + 2));
-            log.info("Created sockDealer: " + sockDealer);
-            log.info("Created sockPull: " + sockPull);
-            log.info("Created sockSub: " + sockSub);
+            log.debug("Created sockDealer: " + sockDealer);
+            log.debug("Created sockPull: " + sockPull);
+            log.debug("Created sockSub: " + sockSub);
         }
         signal = ctx.createSocket(ZMQ.PAIR);
         signal.connect("tcp://127.0.0.1:9999");
@@ -310,20 +310,21 @@ public class XrapPeer implements Runnable {
 
                 } else if (isServer) {
                     if (items.pollin(routerId)) {
-                        log.warn("Router socket got message\n");
+                        log.debug("Router socket got message\n");
                         ByteBuffer routeId = ByteBuffer.wrap(sockRouter.recv());
                         byte[] empty = sockRouter.recv();
                         byte[] responseBytes = sockRouter.recv();
                         if (sockRouter.hasReceiveMore()) {
                             log.warn("sockRouter hasRecieveMore\n");
                         }
-                        log.warn("Recieved data, len: " + responseBytes.length );
+                        log.debug("Recieved data, len: " + responseBytes.length );
                         if (responseBytes.length > 0) {
                             XrapMessage msg = XrapMessage.parseRequest(ByteBuffer.wrap(responseBytes));
                             msg.setRouteid(routeId);
                             if (msg instanceof XrapReply) {
-                                log.warn("Server got a XrapReply! Putting in the reply buffer..\n");
+                                log.debug("Server got a XrapReply! Putting in the reply buffer..");
                                 responseCache.put(msg.getRequestId(),(XrapReply)msg);
+                                // notify any thread waiting for new messages
                                 synchronized (responseCache){
                                     responseCache.notify();
                                 }
@@ -335,20 +336,20 @@ public class XrapPeer implements Runnable {
                         }
                     }
                     if (items.pollin(pubId))
-                        log.warn("Pub socket got message\n");
+                        log.warn("Pub socket got message");
                     if (items.pollin(pushId))
-                        log.warn("Push socket got message\n");
+                        log.warn("Push socket got message");
                     if (items.pollin(signalId)) {
-                        log.warn("Got signal, aborting!\n");
+                        log.warn("Got signal, aborting!");
                         //Thread.currentThread().interrupt();
                         terminate = true;
                         ctx.destroy();
                     }
                 } else if (!isServer) {
                     if (items.pollin(dealerId)) {
-                        log.warn("Dealer socket got message\n");
+                        log.debug("Dealer socket got message");
                         byte[] empty = sockDealer.recv();
-                        log.warn("empty frame: ");
+                        log.debug("empty frame: ");
                         byte[] responseBytes = sockDealer.recv();
                         if(responseBytes == null){
                             log.warn("Got null from sockdealer.recv()!");
@@ -357,13 +358,14 @@ public class XrapPeer implements Runnable {
                         if (sockDealer.hasReceiveMore()) {
                             log.warn("sockRouter hasRecieveMore\n");
                         }
-                        log.warn("Recieved data, len: " + responseBytes.length );
+                        log.info("Recieved data, len: " + responseBytes.length );
                         if (responseBytes.length > 0) {
                             XrapMessage msg = XrapMessage.parseRequest(ByteBuffer.wrap(responseBytes));
                             if (msg instanceof XrapReply) {
-                                log.warn("Client got a XrapReply! Putting in the reply buffer..\n");
+                                log.warn("Client got a XrapReply! Putting in the reply buffer..");
 
                                 responseCache.put(msg.getRequestId(), (XrapReply) msg);
+                                // notify any thread waiting for new messages
                                 synchronized (responseCache){
                                     responseCache.notify();
                                 }
@@ -375,11 +377,11 @@ public class XrapPeer implements Runnable {
                         }
                     }
                     if (items.pollin(subId))
-                        log.warn("Sub socket got message\n");
+                        log.warn("Sub socket got message");
                     if (items.pollin(pullId))
-                        log.warn("Pull socket got message\n");
+                        log.warn("Pull socket got message");
                     if (items.pollin(signalId)) {
-                        log.warn("Got signal, aborting!\n");
+                        log.warn("Got signal, aborting!");
                         ctx.destroy();
                         //Thread.currentThread().interrupt();
                         terminate = true;
@@ -393,7 +395,7 @@ public class XrapPeer implements Runnable {
                 e.printStackTrace();
             }
         }
-        log.info("XrapPeer: returning from run()\n");
+        log.debug("XrapPeer: returning from run()");
         log.info("XrapPeer: context : " + ctx );
         for (ZMQ.Socket s : ctx.getSockets()) {
             log.info("Socket: " + s );
@@ -421,7 +423,7 @@ public class XrapPeer implements Runnable {
         return rep;
     }
 
-    XrapResource trieLookup(String location){
+    private XrapResource trieLookup(String location){
         // first check for perfect match
         XrapResource res = routeTrie.getValueForExactKey(location);
         if (res != null)
@@ -431,20 +433,20 @@ public class XrapPeer implements Runnable {
             return r;
         }
         // finally, look for default
-        log.warn("No handler found for \"" + location + "\", returning default");
+        log.error("No handler found for \"" + location + "\", returning default");
         res = routeTrie.getValueForExactKey("/");
         return res;
     }
 
-    XrapResource findHandler(XrapMessage msg) {
+    private XrapResource findHandler(XrapMessage msg) {
         XrapResource handler = null;
         String location;
         if (msg instanceof XrapRequest) {
             location = ((XrapRequest) msg).getResource();
-            log.info("Looking for handler for route: " + location);
+            log.debug("Looking for handler for route: " + location);
             handler = trieLookup(location);
         }
-        log.info("Found handler: " + handler.getClass());
+        log.debug("Found handler: " + handler.getClass());
         return handler;
     }
 
