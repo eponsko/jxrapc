@@ -4,11 +4,15 @@ import java.io.DataOutputStream;
 import java.io.IOException;
 
 public class XrapGetEmptyReply extends XrapReply {
-    public XrapGetEmptyReply(int requestId, short statusCode){
+    public XrapGetEmptyReply(int requestId, short statusCode) {
         this.setRequestId(requestId);
         this.setStatusCode(statusCode);
     }
-    public XrapGetEmptyReply (){};
+
+    public XrapGetEmptyReply() {
+    }
+
+    ;
 
     void buildReply(DataOutputStream dos) throws IOException {
         dos.writeShort(Constants.SIGNATURE);

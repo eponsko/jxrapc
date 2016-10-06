@@ -6,6 +6,7 @@ import java.nio.ByteBuffer;
 
 /**
  * Represents a POST request to be sent to an XRAP server.
+ *
  * @author tomq
  */
 public class XrapPostRequest extends XrapRequest {

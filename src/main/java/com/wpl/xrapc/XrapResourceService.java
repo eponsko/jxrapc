@@ -8,8 +8,12 @@ package com.wpl.xrapc;
 public interface XrapResourceService {
 
     public String getRoute();
-    public XrapReply GET(XrapGetRequest request) ;
+
+    public XrapReply GET(XrapGetRequest request);
+
     public XrapReply DELETE(XrapDeleteRequest request);
+
     public XrapReply POST(XrapPostRequest request);
+
     public XrapReply PUT(XrapPutRequest request);
 }

@@ -15,25 +15,8 @@ import java.util.Date;
 public class XrapMessage {
     private static Charset utf8 = Charset.forName("UTF8");
     private ByteBuffer routeid = null;
-
-    public int getRequestId() {
-        return requestId;
-    }
-
-    public void setRequestId(int requestId) {
-        this.requestId = requestId;
-    }
-
     private int requestId;
 
-    public String toString() {
-        StringBuilder sb = new StringBuilder();
-        sb.append("Request-Id: " + getRequestId() + "\n");
-        if(routeid != null)
-            sb.append("RouterId: " + Hex.encodeHexString(getRouteid().array()) + "\n");
-
-        return sb.toString();
-    }
     public static XrapMessage parseRequest(ByteBuffer buffer) throws XrapException {
         buffer.order(ByteOrder.BIG_ENDIAN);
         short signature = buffer.getShort();
@@ -91,7 +74,7 @@ public class XrapMessage {
             XrapPostReply response = new XrapPostReply();
             response.setRequestId(buffer.getInt());
             response.setStatusCode(buffer.getShort());
-            response.setLocation( sreadString(buffer));
+            response.setLocation(sreadString(buffer));
             response.setEtag(sreadString(buffer));
             response.setDateModified(buffer.getLong());
             response.setContentType(sreadString(buffer));
@@ -103,15 +86,15 @@ public class XrapMessage {
             response.setRequestId(buffer.getInt());
             response.setStatusCode(buffer.getShort());
             response.setEtag(sreadString(buffer));
-            response.setDateModified( buffer.getLong());
-            response.setContentType( sreadString(buffer));
+            response.setDateModified(buffer.getLong());
+            response.setContentType(sreadString(buffer));
             response.setBody(sreadLongBinaryString(buffer));
             response.setMetadata(readHash(buffer));
             return response;
         } else if (command == Constants.PUT_OK_COMMAND) {
             XrapPutReply response = new XrapPutReply();
-            response.setRequestId( buffer.getInt());
-            response.setStatusCode( buffer.getShort());
+            response.setRequestId(buffer.getInt());
+            response.setStatusCode(buffer.getShort());
             response.setLocation(sreadString(buffer));
             response.setEtag(sreadString(buffer));
             response.setDateModified(buffer.getLong());
@@ -133,14 +116,6 @@ public class XrapMessage {
         }
     }
 
-    public ByteBuffer getRouteid() {
-        return routeid;
-    }
-
-    public void setRouteid(ByteBuffer routeid) {
-        this.routeid = routeid;
-    }
-
     protected static void checkSignature(ByteBuffer dis) throws XrapException {
         short signature = dis.getShort();
         if (signature != Constants.SIGNATURE) {
@@ -148,22 +123,12 @@ public class XrapMessage {
         }
     }
 
-    protected XrapReply sreadErrorResponse(ByteBuffer dis) {
-        XrapErrorReply response = new XrapErrorReply();
-        response.setRequestId(dis.getInt());
-        response.setStatusCode(dis.getShort());
-        response.setErrorText(sreadString(dis));
-        return response;
-    }
-
-
     protected static String sreadString(ByteBuffer dis) {
         int length = dis.get() & 0xff;
         byte[] stringBytes = new byte[length];
         dis.get(stringBytes);
         return new String(stringBytes, utf8);
     }
-
 
     protected static byte[] sreadLongBinaryString(ByteBuffer dis) {
         int length = dis.getInt();
@@ -190,8 +155,9 @@ public class XrapMessage {
         }
         return result;
     }
+
     protected static void writeHash(DataOutputStream dos, NameValuePair[] metadata) throws IOException {
-        if(metadata == null){
+        if (metadata == null) {
             dos.writeInt(0);
         } else {
             dos.writeInt(metadata.length);
@@ -206,12 +172,14 @@ public class XrapMessage {
         writeString(dos, s == null ? null : s.getBytes(utf8));
     }
 
-    protected static void  writeString(DataOutputStream dos, byte[] bytes) throws IOException {
+    protected static void writeString(DataOutputStream dos, byte[] bytes) throws IOException {
         if (bytes == null) {
             dos.writeByte(0);
             return;
         }
-        if (bytes.length > 255) throw new IllegalArgumentException();
+        if (bytes.length > 255) {
+            throw new IllegalArgumentException();
+        }
         dos.writeByte(bytes.length);
         dos.write(bytes);
     }
@@ -229,11 +197,49 @@ public class XrapMessage {
         dos.write(bytes);
     }
 
+    public int getRequestId() {
+        return requestId;
+    }
+
+    public void setRequestId(int requestId) {
+        this.requestId = requestId;
+    }
+
+    public String toString() {
+        StringBuilder sb = new StringBuilder();
+        sb.append("Request-Id: " + getRequestId() + "\n");
+        if (routeid != null) {
+            sb.append("RouterId: " + Hex.encodeHexString(getRouteid().array()) + "\n");
+        }
+
+        return sb.toString();
+    }
+
+    public ByteBuffer getRouteid() {
+        return routeid;
+    }
+
+    public void setRouteid(ByteBuffer routeid) {
+        this.routeid = routeid;
+    }
+
+    protected XrapReply sreadErrorResponse(ByteBuffer dis) {
+        XrapErrorReply response = new XrapErrorReply();
+        response.setRequestId(dis.getInt());
+        response.setStatusCode(dis.getShort());
+        response.setErrorText(sreadString(dis));
+        return response;
+    }
+
     protected void writeParameter(DataOutputStream dos, XrapGetRequest.Parameter p) throws IOException {
         writeString(dos, p.getName());
-        if (p.isBinary()) writeLongString(dos, p.getBinaryValue());
-        else writeLongString(dos, p.getStringValue());
+        if (p.isBinary()) {
+            writeLongString(dos, p.getBinaryValue());
+        } else {
+            writeLongString(dos, p.getStringValue());
+        }
     }
+
     protected String readString(ByteBuffer dis) {
         int length = dis.get() & 0xff;
         byte[] stringBytes = new byte[length];

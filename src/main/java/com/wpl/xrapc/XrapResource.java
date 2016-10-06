@@ -5,7 +5,7 @@ package com.wpl.xrapc;
  * Created by eponsko on 2016-09-21.
  */
 
-public class XrapResource implements XrapResourceService{
+public class XrapResource implements XrapResourceService {
     private String route;
 
     public XrapResource() {

@@ -37,10 +37,11 @@ public class XrapDeleteReply extends XrapReply {
 
         sb.append("Type: DELETE-OK\n");
 
-        if (getMetadata() != null)
+        if (getMetadata() != null) {
             for (NameValuePair nvp : getMetadata()) {
                 sb.append("Meta: " + nvp.getName() + " Value: " + nvp.getStringValue() + "\n");
             }
+        }
 
         return super.toString() + sb.toString();
     }

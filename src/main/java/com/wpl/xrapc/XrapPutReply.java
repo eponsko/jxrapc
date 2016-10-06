@@ -37,6 +37,10 @@ public class XrapPutReply extends XrapReply {
         return location;
     }
 
+    public void setLocation(String location) {
+        this.location = location;
+    }
+
     public String getEtag() {
         return etag;
     }
@@ -61,26 +65,25 @@ public class XrapPutReply extends XrapReply {
         this.metadata = metadata;
     }
 
-    public void setLocation(String location) {
-        this.location = location;
-    }
-
     ;
 
     public String toString() {
         StringBuilder sb = new StringBuilder();
         sb.append("Type: PUT-OK\n");
-        if (getLocation() != null)
+        if (getLocation() != null) {
             sb.append("Location: " + getLocation().toString() + "\n");
-        if (getEtag() != null)
+        }
+        if (getEtag() != null) {
             sb.append("Etag: " + getEtag() + "\n");
+        }
 
         sb.append("Date modified: " + new Date(getDateModified()).toString() + "\n");
 
-        if (getMetadata() != null)
+        if (getMetadata() != null) {
             for (NameValuePair nvp : getMetadata()) {
                 sb.append("Meta: " + nvp.getName() + " Value: " + nvp.getStringValue() + "\n");
             }
+        }
 
         return super.toString() + sb.toString();
     }

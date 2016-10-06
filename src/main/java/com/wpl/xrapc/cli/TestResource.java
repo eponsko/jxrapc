@@ -6,9 +6,24 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.xml.XmlMapper;
 */
+
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
-import com.google.gson.annotations.SerializedName;
+import com.wpl.xrapc.Constants;
+import com.wpl.xrapc.XrapErrorReply;
+import com.wpl.xrapc.XrapGetReply;
+import com.wpl.xrapc.XrapGetRequest;
+import com.wpl.xrapc.XrapPostRequest;
+import com.wpl.xrapc.XrapPutReply;
+import com.wpl.xrapc.XrapReply;
+import com.wpl.xrapc.XrapResource;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.util.Date;
+import java.util.HashMap;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /* attempt to use JAXB for XML marshalling
 painful
@@ -20,16 +35,6 @@ import javax.xml.bind.Marshaller;
 import javax.xml.bind.annotation.*;
 */
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import com.wpl.xrapc.*;
-
-
-import java.util.Date;
-import java.util.HashMap;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
-
 
 /*
  TestResource
@@ -40,12 +45,13 @@ import java.util.regex.Pattern;
 
 
 class Link {
-    public Link(String src, String dst){
+    private String source = null;
+    private String destination = null;
+
+    public Link(String src, String dst) {
         source = src;
         destination = dst;
     }
-    private String source = null;
-    private String destination = null;
 
     @Override
     public String toString() {
@@ -54,8 +60,9 @@ class Link {
 }
 
 public class TestResource extends XrapResource {
-    private Logger log;
+    private static Pattern GET_PATTERN = Pattern.compile("/test/(.+)");
     HashMap<Integer, Link> testMap;
+    private Logger log;
 
     public TestResource() {
         testMap = new HashMap<>();
@@ -65,18 +72,20 @@ public class TestResource extends XrapResource {
         testMap.put(2, new Link("hatt", "fnatt"));
     }
 
-    public XrapReply POST(XrapPostRequest request){
+    public XrapReply POST(XrapPostRequest request) {
         boolean valid = true;
         int length;
-        if(request.getContentType() != null)
-            if (request.getContentType().equals("application/json"))
+        if (request.getContentType() != null) {
+            if (request.getContentType().equals("application/json")) {
                 valid = true;
-            else
+            } else {
                 valid = false;
-        else
+            }
+        } else {
             valid = false;
+        }
 
-        if(!valid){
+        if (!valid) {
             log.info("Bad contentType!");
             XrapErrorReply rep = new XrapErrorReply();
             rep.setStatusCode(Constants.BadRequest_400);
@@ -86,11 +95,10 @@ public class TestResource extends XrapResource {
             return rep;
         }
 
-
         String json = new String(request.getContentBody());
         Gson gson = new GsonBuilder().create();
-        Link l = gson.fromJson(json,Link.class);
-        log.info("deserialised to " + l );
+        Link l = gson.fromJson(json, Link.class);
+        log.info("deserialised to " + l);
         length = testMap.size() + 1;
         testMap.put(length, l);
 
@@ -98,14 +106,12 @@ public class TestResource extends XrapResource {
         rep.setEtag(new Integer(length).toString());
         rep.setDateModified(new Date().getTime());
         rep.setStatusCode(Constants.Created_201);
-        rep.setLocation("/text/"+length);
+        rep.setLocation(getRoute() + length);
         rep.setRequestId(request.getRequestId());
         rep.setRouteid(request.getRouteid());
         return rep;
-
     }
 
-    private static Pattern GET_PATTERN = Pattern.compile("/test/(.+)");
     @Override
     public XrapReply GET(XrapGetRequest request) {
         String retval = "10";
@@ -122,9 +128,9 @@ public class TestResource extends XrapResource {
         m = GET_PATTERN.matcher(location);
         if (m.matches()) {
             index = new Integer(m.group(1));
-            log.info("Matched id \""+m.group(1)+"\"");
+            log.info("Matched id \"" + m.group(1) + "\"");
             res = testMap.get(index);
-            if (res == null){
+            if (res == null) {
                 XrapErrorReply rep = new XrapErrorReply();
                 rep.setStatusCode(Constants.NotFound_404);
                 rep.setRouteid(request.getRouteid());
@@ -158,22 +164,24 @@ public class TestResource extends XrapResource {
                 useXml = true;
             }
         }
-            if (res == null)
-                replyBody = gson.toJson(testMap, HashMap.class);
-            else
-                replyBody = gson.toJson(res,Link.class);
+        if (res == null) {
+            replyBody = gson.toJson(testMap, HashMap.class);
+        } else {
+            replyBody = gson.toJson(res, Link.class);
+        }
 
         if (replyBody != null) {
             XrapGetReply rep = new XrapGetReply();
-            if(useXml)
+            if (useXml) {
                 rep.setContentType("application/test+xml");
-            else
+            } else {
                 rep.setContentType("application/test+json");
+            }
             rep.setBody(replyBody.getBytes());
 
-            if(index != null) {
+            if (index != null) {
                 rep.setEtag(index.toString());
-            }else {
+            } else {
                 rep.setEtag("*");
             }
             rep.setDateModified(new Date().getTime());

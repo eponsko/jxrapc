@@ -81,20 +81,24 @@ public class XrapGetReply extends XrapReply {
         StringBuilder sb = new StringBuilder();
 
         sb.append("Type: GET-OK\n");
-        if (getEtag() != null)
+        if (getEtag() != null) {
             sb.append("Etag: " + getEtag() + "\n");
+        }
 
         sb.append("Date modified: " + new Date(getDateModified()).toString() + "\n");
 
-        if (getContentType() != null)
+        if (getContentType() != null) {
             sb.append("Content-Type: " + getContentType() + "\n");
-        if (getBody() != null)
+        }
+        if (getBody() != null) {
             sb.append("Body: " + new String(getBody()) + "\n");
+        }
 
-        if (getMetadata() != null)
+        if (getMetadata() != null) {
             for (NameValuePair nvp : getMetadata()) {
                 sb.append("Meta: " + nvp.getName() + " Value: " + nvp.getStringValue() + "\n");
             }
+        }
 
         return super.toString() + sb.toString();
     }

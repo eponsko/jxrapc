@@ -16,18 +16,9 @@ import java.util.concurrent.atomic.AtomicInteger;
  */
 public abstract class XrapRequest extends XrapMessage {
     private static Charset utf8 = Charset.forName("UTF8");
+    private static AtomicInteger nextRequestId = new AtomicInteger(1);
     private String resource;
     private int requestId;
-    private static AtomicInteger nextRequestId = new AtomicInteger(1);
-
-    public String toString() {
-        StringBuilder sb = new StringBuilder();
-        if (resource != null)
-            sb.append("Resource: " + resource + "\n");
-        sb.append("RequestId: " + requestId + "\n");
-
-        return sb.toString();
-    }
 
     protected XrapRequest(String resource) {
         this.resource = resource;
@@ -37,49 +28,11 @@ public abstract class XrapRequest extends XrapMessage {
     protected XrapRequest() {
     }
 
-    /**
-     * Returns the request ID for this request.
-     *
-     * @return The request ID.
-     */
-    public int getRequestId() {
-        return requestId;
-    }
-
-    public void setRequestId(int id) {
-        requestId = id;
-    }
-
-    /**
-     * Sets the resource that is the subject of the request.
-     * This is a string of the form /a/b/c.
-     * The resource string is always passed to the server as a UTF8 string.
-     *
-     * @param resource The new resource.
-     */
-    public void setResource(String resource) {
-        this.resource = resource;
-    }
-
-    /**
-     * Returns the resource that is the subject of the request.
-     *
-     * @return The resource
-     */
-    public String getResource() {
-        return resource;
-    }
-
-    abstract void buildRequest(DataOutputStream dos) throws IOException;
-
-    abstract XrapReply parseResponse(ByteBuffer response) throws XrapException;
-
     public static XrapRequest parseRequest(ByteBuffer routeid, ByteBuffer buffer) throws XrapException {
         XrapRequest rep = parseRequest(buffer);
         rep.setRouteid(routeid);
         return rep;
     }
-
 
     public static XrapRequest parseRequest(ByteBuffer buffer) throws XrapException {
         buffer.order(ByteOrder.BIG_ENDIAN);
@@ -133,6 +86,53 @@ public abstract class XrapRequest extends XrapMessage {
         }
     }
 
+    public String toString() {
+        StringBuilder sb = new StringBuilder();
+        if (resource != null) {
+            sb.append("Resource: " + resource + "\n");
+        }
+        sb.append("RequestId: " + requestId + "\n");
+
+        return sb.toString();
+    }
+
+    /**
+     * Returns the request ID for this request.
+     *
+     * @return The request ID.
+     */
+    public int getRequestId() {
+        return requestId;
+    }
+
+    public void setRequestId(int id) {
+        requestId = id;
+    }
+
+    /**
+     * Returns the resource that is the subject of the request.
+     *
+     * @return The resource
+     */
+    public String getResource() {
+        return resource;
+    }
+
+    /**
+     * Sets the resource that is the subject of the request.
+     * This is a string of the form /a/b/c.
+     * The resource string is always passed to the server as a UTF8 string.
+     *
+     * @param resource The new resource.
+     */
+    public void setResource(String resource) {
+        this.resource = resource;
+    }
+
+    abstract void buildRequest(DataOutputStream dos) throws IOException;
+
+    abstract XrapReply parseResponse(ByteBuffer response) throws XrapException;
+
     XrapReply parseResponse(byte[] responseBytes) throws XrapException {
         ByteBuffer response = ByteBuffer.wrap(responseBytes);
         response.order(ByteOrder.BIG_ENDIAN);
@@ -146,11 +146,10 @@ public abstract class XrapRequest extends XrapMessage {
     }
 
 
-
     protected XrapReply readErrorResponse(ByteBuffer dis) {
         XrapErrorReply response = new XrapErrorReply();
         response.setRequestId(dis.getInt());
-        response.setStatusCode( dis.getShort());
+        response.setStatusCode(dis.getShort());
         response.setErrorText(readString(dis));
         return response;
     }
