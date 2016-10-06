@@ -134,7 +134,11 @@ public class XrapClientShell {
         ConsoleReader reader = new ConsoleReader();
         try {
             PrintWriter out = new PrintWriter(reader.getOutput());
-            reader.setPrompt("> ");
+            if(isServer) {
+                reader.setPrompt("S> ");
+            } else {
+                reader.setPrompt("C> ");
+            }
 
             StringBuilder commandString = new StringBuilder();
             while (true) {

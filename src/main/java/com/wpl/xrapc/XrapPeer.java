@@ -362,11 +362,11 @@ public class XrapPeer implements Runnable {
                         if (sockDealer.hasReceiveMore()) {
                             log.warn("sockRouter hasRecieveMore\n");
                         }
-                        log.info("Recieved data, len: " + responseBytes.length);
+                        log.debug("Recieved data, len: " + responseBytes.length);
                         if (responseBytes.length > 0) {
                             XrapMessage msg = XrapMessage.parseRequest(ByteBuffer.wrap(responseBytes));
                             if (msg instanceof XrapReply) {
-                                log.warn("Client got a XrapReply! Putting in the reply buffer..");
+                                log.debug("Client got a XrapReply! Putting in the reply buffer..");
 
                                 responseCache.put(msg.getRequestId(), (XrapReply) msg);
                                 // notify any thread waiting for new messages
