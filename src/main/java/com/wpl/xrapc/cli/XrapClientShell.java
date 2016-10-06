@@ -14,13 +14,12 @@ import java.io.IOException;
 import java.io.PrintWriter;
 import java.lang.management.ManagementFactory;
 import java.lang.management.ThreadMXBean;
+import java.sql.Time;
 
 import static sun.misc.ThreadGroupUtils.getRootThreadGroup;
 
 public class XrapClientShell {
 	static Logger log;
-	private ZMQ.Socket signal;
-	private ZContext ctx;
 	private Thread xrapClient;
 
 	private static  Thread[] getAllThreads( ) {
@@ -49,11 +48,7 @@ public class XrapClientShell {
 		catch (IOException ex) {
 			log.error(ex.getMessage());
 		}
-		for (Thread t: getAllThreads()) {
-			log.info("Thread : " + t);
-		}
-
-	}
+    }
 	
 	private static Options buildCommandLineOptions() {
 		Options options = new Options();
@@ -96,16 +91,10 @@ public class XrapClientShell {
 		this.port = 7777;
 		this.host = "127.0.0.1";
 		this.timeoutSeconds = 5;
-		ctx = new ZContext();
-		client = new XrapPeer(host,port, isServer, ZContext.shadow(ctx));
+
+		client = new XrapPeer(host,port, isServer);
 		client.setTimeout(timeoutSeconds);
-
 		client.addHandler(new TestResource());
-
-		log.debug("Creating signal socket");
-		signal = ctx.createSocket(ZMQ.PAIR);
-		log.debug("Connecting signal socket");
-		signal.bind("tcp://127.0.0.1:9999");
 	}
 	
 	private void parseArgs(String[] args) throws UsageException {
@@ -177,20 +166,13 @@ public class XrapClientShell {
 			}
 		}
 		finally {
-			log.info("Sending terminate signal to XrapPeer");
-			signal.send("$TERM",0);
-			//signal.close();
-			ctx.destroy();
+
+			log.info("Terminating XrapPeer..");
+			client.terminate();
 			log.info("Terminating reader..");
 			reader.shutdown();
-			try {
-				log.info("Waiting for termination of XrapPeer thread..");
-				xrapClient.join();
-			} catch (InterruptedException e) {
-				e.printStackTrace();
-			}
-		}
-		ctx.destroy();
+        }
+
 	}
 	
 	private boolean parseLine(String commandString) throws UsageException, XrapException, InterruptedException {
@@ -207,7 +189,7 @@ public class XrapClientShell {
 			return true;
 		}
 		else {
-			throw new UsageException(String.format("Unrecognised command '%'", commandName));
+			throw new UsageException(String.format("Unrecognised command \"" + commandName + "\""));
 		}
 		return false;
 	}
@@ -221,8 +203,7 @@ public class XrapClientShell {
 		String item;
 		while ((item = tok.nextToken())!=null) {
 			Utils.parseItem(command, item);
-		}
-		
+        }
 		command.run(client);
 	}
 

@@ -25,7 +25,6 @@ import org.zeromq.ZMQ;
  * @author tomq
  */
 public class XrapClientTool {
-	private ZContext ctx;
 	public static void main(String[] args) {
 		try {
 			new XrapClientTool(args).run();
@@ -54,7 +53,6 @@ public class XrapClientTool {
 	
 	
 	public XrapClientTool(String[] args) throws UsageException {
-		ctx = new ZContext();
 		command = parseArgs(args);
 	}
 	
@@ -140,7 +138,7 @@ public class XrapClientTool {
 	}
 	
 	public void run() throws XrapException, UsageException, IOException, InterruptedException {
-		XrapPeer client = new XrapPeer(host, port,true, ZContext.shadow(ctx));
+		XrapPeer client = new XrapPeer(host, port,true);
 		client.setTimeout(timeoutSeconds);
 		
 		if (command.needsBody()) {

@@ -1,5 +1,27 @@
 Manifest-Version: 1.0
-Built-By: tomq
-Build-Jdk: 1.8.0_91
-Created-By: Maven Integration for Eclipse
-
+Bnd-LastModified: 1475508921317
+Build-Jdk: 1.8.0_72
+Built-By: eponsko
+Bundle-ManifestVersion: 2
+Bundle-Name: XrapPeer
+Bundle-SymbolicName: com.wpl.xrapc.XrapPeer
+Bundle-Version: 0.0.2.SNAPSHOT
+Class-Path: lib/commons-cli-1.3.1.jar lib/json-simple-1.1.1.jar lib/juni
+ t-4.10.jar lib/hamcrest-core-1.1.jar lib/jline-2.12.jar lib/jeromq-0.3.
+ 2.jar lib/slf4j-log4j12-1.7.21.jar lib/log4j-1.2.17.jar lib/commons-cod
+ ec-1.10.jar lib/slf4j-api-1.7.7.jar lib/gson-2.5.jar lib/concurrent-tre
+ es-2.6.0.jar
+Created-By: Apache Maven Bundle Plugin
+Export-Package: com.wpl.xrapc;version="0.0.2",com.wpl.xrapc.cli;uses:="c
+ om.wpl.xrapc";version="0.0.2"
+Import-Package: com.google.gson;version="[2.5,3)",com.googlecode.concurr
+ enttrees.radix;version="[2.6,3)",com.googlecode.concurrenttrees.radix.n
+ ode;version="[2.6,3)",com.googlecode.concurrenttrees.radix.node.concret
+ e;version="[2.6,3)",com.wpl.xrapc,jline.console;version="[2.12,3)",org.
+ apache.commons.cli;version="[1.3,2)",org.apache.commons.codec.binary;ve
+ rsion="[1.10,2)",org.json.simple;version="[1.1,2)",org.json.simple.pars
+ er;version="[1.1,2)",org.slf4j;version="[1.7,2)",org.zeromq;version="[0
+ .3,1)",sun.misc,zmq;version="[0.3,1)"
+Main-Class: com.wpl.xrapc.cli.XrapClientShell
+Require-Capability: osgi.ee;filter:="(&(osgi.ee=JavaSE)(version=1.7))"
+Tool: Bnd-3.2.0.201605172007

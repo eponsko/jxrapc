@@ -1,19 +1,21 @@
-package com.wpl.xrapc.cli;
-import com.wpl.xrapc.*;
+package com.wpl.xrapc;
 
 /**
  * Represents a particular resource, and the different operations that can be used on it
  * Created by eponsko on 2016-09-21.
  */
-public class XrapResource {
+
+public class XrapResource implements XrapResourceService{
     private String route;
 
     public XrapResource() {
         setRoute("/");
     }
-    public XrapResource(String route){
+
+    public XrapResource(String route) {
         setRoute(route);
     }
+
     public String getRoute() {
         return route;
     }

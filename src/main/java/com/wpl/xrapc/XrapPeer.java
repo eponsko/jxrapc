@@ -1,11 +1,9 @@
 package com.wpl.xrapc;
 
-import com.googlecode.concurrenttrees.common.Iterables;
 import com.googlecode.concurrenttrees.radix.ConcurrentRadixTree;
 import com.googlecode.concurrenttrees.radix.RadixTree;
 import com.googlecode.concurrenttrees.radix.node.concrete.DefaultCharArrayNodeFactory;
-import com.wpl.xrapc.cli.TestResource;
-import com.wpl.xrapc.cli.XrapResource;
+import com.wpl.xrapc.XrapResource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.zeromq.ZContext;
@@ -16,7 +14,6 @@ import java.io.ByteArrayOutputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.*;
 import java.util.concurrent.locks.Lock;
@@ -32,21 +29,21 @@ import java.util.concurrent.locks.ReentrantLock;
 
 
 public class XrapPeer implements Runnable {
-
     private static int threadnum = 1;
     private RadixTree<XrapResource> routeTrie;
     private int port;
     private String host;
     private ZMQ.Socket sockDealer, sockPush, sockSub;
     private ZMQ.Socket sockRouter, sockPull, sockPub;
+    private ZMQ.Socket signal;
+    private ZContext ctx;
+
     private long receiveTimeout = 30;
     private TimeUnit receiveTimeoutUnit = TimeUnit.SECONDS;
-    private Map<Integer, com.wpl.xrapc.XrapReply> responseCache = new ConcurrentHashMap<Integer, XrapReply>();
+    private final Map<Integer, com.wpl.xrapc.XrapReply> responseCache = new ConcurrentHashMap<Integer, XrapReply>();
     private Lock lock = new ReentrantLock();
     private boolean isServer;
     private Logger log;
-    private ZMQ.Socket signal;
-    private ZContext ctx;
     private int signalId, routerId, dealerId, pubId, subId, pushId, pullId;
     private boolean terminate = false;
 
@@ -56,12 +53,10 @@ public class XrapPeer implements Runnable {
      * @param host The endpoint to connect to. This should be of the form
      *             tcp://hostname/port (see http://api.zeromq.org/4-0:zmq-tcp)
      */
-    public XrapPeer(String host, int port, boolean isServer, ZContext context) {
+    public XrapPeer(String host, int port, boolean isServer) {
         this.log = LoggerFactory.getLogger(XrapPeer.class);
-
         this.host = host;
         this.port = port;
-        this.ctx = context;
         this.isServer = isServer;
         routeTrie = new ConcurrentRadixTree<>(new DefaultCharArrayNodeFactory());
         XrapResource handler = new XrapResource();
@@ -76,6 +71,10 @@ public class XrapPeer implements Runnable {
 
     public void terminate() {
         terminate = true;
+        //ZMQ.Socket sendsig = ctx.socket(ZMQ.REQ);
+        ZMQ.Socket sendsig = ctx.createSocket(ZMQ.REQ);
+        sendsig.connect("inproc://signal");
+        sendsig.send("shutdown");
     }
 
     /**
@@ -260,7 +259,8 @@ public class XrapPeer implements Runnable {
     @Override
     public void run() {
         Thread.currentThread().setName(String.format("XrapPeer-%d", threadnum));
-
+        ctx = new ZContext();
+        ZMQ.Poller items = new ZMQ.Poller(4);
         if (isServer) {
             log.info("Creating XRAP peer as server, binding to: " + String.format("tcp://%s:%d", host, port));
             sockRouter = ctx.createSocket(ZMQ.ROUTER);
@@ -285,13 +285,12 @@ public class XrapPeer implements Runnable {
             log.debug("Created sockPull: " + sockPull);
             log.debug("Created sockSub: " + sockSub);
         }
-        signal = ctx.createSocket(ZMQ.PAIR);
-        signal.connect("tcp://127.0.0.1:9999");
+        signal = ctx.createSocket(ZMQ.REP);
+        signal.bind("inproc://signal");
         log.info("Connected signal: " + signal);
         // Wait for new messages, receive them, and process
         while (!Thread.currentThread().isInterrupted() && !terminate) {
-            //log.info("polling");
-            ZMQ.Poller items = new ZMQ.Poller(4);
+
             if (isServer) {
                 signalId = items.register(signal, ZMQ.Poller.POLLIN);
                 routerId = items.register(sockRouter, ZMQ.Poller.POLLIN);
@@ -343,7 +342,6 @@ public class XrapPeer implements Runnable {
                         log.warn("Got signal, aborting!");
                         //Thread.currentThread().interrupt();
                         terminate = true;
-                        ctx.destroy();
                     }
                 } else if (!isServer) {
                     if (items.pollin(dealerId)) {
@@ -382,25 +380,19 @@ public class XrapPeer implements Runnable {
                         log.warn("Pull socket got message");
                     if (items.pollin(signalId)) {
                         log.warn("Got signal, aborting!");
-                        ctx.destroy();
                         //Thread.currentThread().interrupt();
                         terminate = true;
                     }
                 }
             } catch (ZError.IOException e) {
                 log.error("items.poll() caught exception: " + e);
-                ctx.destroy();
                 Thread.currentThread().interrupt();
             } catch (XrapException e) {
                 e.printStackTrace();
             }
         }
-        log.debug("XrapPeer: returning from run()");
-        log.info("XrapPeer: context : " + ctx );
-        for (ZMQ.Socket s : ctx.getSockets()) {
-            log.info("Socket: " + s );
-        }
 
+        ctx.destroy();
     }
 
     private XrapReply handleRequest(XrapMessage msg) {
@@ -446,7 +438,12 @@ public class XrapPeer implements Runnable {
             log.debug("Looking for handler for route: " + location);
             handler = trieLookup(location);
         }
-        log.debug("Found handler: " + handler.getClass());
+        if(handler != null) {
+            log.debug("Found handler: " + handler.getClass());
+        } else {
+            log.error("Couldn't find any handler!");
+        }
+
         return handler;
     }
 

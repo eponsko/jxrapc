@@ -122,7 +122,16 @@ public class TestResource extends XrapResource {
         m = GET_PATTERN.matcher(location);
         if (m.matches()) {
             index = new Integer(m.group(1));
+            log.info("Matched id \""+m.group(1)+"\"");
             res = testMap.get(index);
+            if (res == null){
+                XrapErrorReply rep = new XrapErrorReply();
+                rep.setStatusCode(Constants.NotFound_404);
+                rep.setRouteid(request.getRouteid());
+                rep.setRequestId(request.getRequestId());
+                rep.setErrorText("Could not find resource");
+                return rep;
+            }
         }
 
         for (XrapGetRequest.Parameter p : request.getParameters()) {
