@@ -31,6 +31,14 @@ public class XrapGetRequest extends XrapRequest {
     public XrapGetRequest() {
 
     }
+    public XrapGetRequest(String resource, String body){
+        super(resource);
+        ifNoneMatch = "*";
+        contentType = "application/json";
+        ifModifiedSince = new Date();
+        // always get
+        ifModifiedSince.setTime(0);
+    }
 
     public String toString() {
         StringBuilder sb = new StringBuilder();

@@ -26,6 +26,12 @@ public class XrapPostRequest extends XrapRequest {
     public XrapPostRequest() {
     }
 
+    public XrapPostRequest(String resource, String body) {
+        super(resource);
+        contentType = "application/json";
+        contentBody = body.getBytes();
+    }
+
     public String toString() {
         String top = super.toString();
         StringBuilder sb = new StringBuilder();

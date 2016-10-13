@@ -25,6 +25,14 @@ public class XrapPutRequest extends XrapRequest {
         super(resource);
     }
 
+    public XrapPutRequest(String resource, String body) {
+        super(resource);
+        ifUnmodifiedSince = new Date();
+        contentType = "application/json";
+        contentBody = body.getBytes();
+    }
+
+
     public XrapPutRequest() {
     }
 

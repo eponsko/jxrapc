@@ -41,6 +41,7 @@ public class XrapPeer implements Runnable {
     private ZMQ.Socket sockRouter, sockPull, sockPub;
     private ZMQ.Socket signal;
     private ZContext ctx;
+    private boolean ready = false;
     private long receiveTimeout = 30;
     private TimeUnit receiveTimeoutUnit = TimeUnit.SECONDS;
     private Lock lock = new ReentrantLock();
@@ -69,6 +70,22 @@ public class XrapPeer implements Runnable {
         log.info("Registering route " + handler.getRoute() + " with handler : " + handler.getClass());
         routeTrie.put(handler.getRoute(), handler);
 
+    }
+    private synchronized void setReady(){
+        ready = true;
+        notifyAll();
+    }
+
+    public synchronized void waitUntilReady(){
+        log.warn("waitUntilReady called..");
+        try {
+            while(!ready){
+                wait();
+            }
+        } catch (InterruptedException e) {
+            log.error(e.toString());
+        }
+        log.warn("waitUntilReady done!");
     }
 
     public void terminate() {
@@ -292,6 +309,11 @@ public class XrapPeer implements Runnable {
         signal = ctx.createSocket(ZMQ.REP);
         signal.bind("inproc://signal");
         log.info("Connected signal: " + signal);
+        // synchronize startup with creating thread
+
+        setReady();
+
+        log.warn("starting message processing");
         // Wait for new messages, receive them, and process
         while (!Thread.currentThread().isInterrupted() && !terminate) {
 

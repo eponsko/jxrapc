@@ -21,6 +21,8 @@ public class XrapDeleteRequest extends com.wpl.xrapc.XrapRequest {
      */
     public XrapDeleteRequest(String resource) {
         super(resource);
+        ifUnmodifiedSince = new Date();
+        ifMatch = "*";
     }
 
     public XrapDeleteRequest() {
