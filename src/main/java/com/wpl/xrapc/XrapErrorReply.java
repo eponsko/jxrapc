@@ -15,7 +15,7 @@ public class XrapErrorReply extends XrapReply {
     public XrapErrorReply() {
     }
 
-    void buildReply(DataOutputStream dos) throws IOException {
+    public void buildReply(DataOutputStream dos) throws IOException {
         dos.writeShort(Constants.SIGNATURE);
         dos.writeByte(Constants.ERROR_COMMAND);
         dos.writeInt(getRequestId());

@@ -11,7 +11,14 @@ public class XrapGetReply extends XrapReply {
     private byte[] body;
     private NameValuePair[] metadata;
 
-    public XrapGetReply(int requestId, short statusCode, String etag, long dateModified, String contentType, byte[] contentBody, NameValuePair[] metadata) {
+    public XrapGetReply(
+            int requestId,
+            short statusCode,
+            String etag,
+            long dateModified,
+            String contentType,
+            byte[] contentBody,
+            NameValuePair[] metadata) {
         setRequestId(requestId);
         setStatusCode(statusCode);
         setEtag(etag);
@@ -24,7 +31,7 @@ public class XrapGetReply extends XrapReply {
     public XrapGetReply() {
     }
 
-    void buildReply(DataOutputStream dos) throws IOException {
+    public void buildReply(DataOutputStream dos) throws IOException {
         dos.writeShort(Constants.SIGNATURE);
         dos.writeByte(Constants.GET_OK_COMMAND);
         dos.writeInt(getRequestId());

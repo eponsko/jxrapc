@@ -25,6 +25,16 @@ public class XrapPostReply extends XrapReply {
 
     public XrapPostReply() {
     }
+    /* create a positive default response */
+    public XrapPostReply(XrapRequest req) {
+        setRequestId(req.getRequestId());
+        setLocation(req.getResource());
+        setEtag("*");
+        setDateModified(new Date().getTime());
+        setStatusCode(Constants.Created_201);
+        setRouteid(req.getRouteid());
+
+    }
 
     public NameValuePair[] getMetadata() {
         return metadata;
@@ -74,19 +84,17 @@ public class XrapPostReply extends XrapReply {
         this.body = body;
     }
 
-    ;
-
-    void buildReply(DataOutputStream dos) throws IOException {
+    public void buildReply(DataOutputStream dos) throws IOException {
         dos.writeShort(Constants.SIGNATURE);
         dos.writeByte(Constants.POST_OK_COMMAND);
         dos.writeInt(getRequestId());
         dos.writeShort(getStatusCode());
-        writeString(dos, getLocation());
-        writeString(dos, getEtag());
+        XrapMessage.writeString(dos, getLocation());
+        XrapMessage.writeString(dos, getEtag());
         dos.writeLong(getDateModified());
-        writeString(dos, getContentType());
-        writeLongString(dos, getBody());
-        writeHash(dos, getMetadata());
+        XrapMessage.writeString(dos, getContentType());
+        XrapMessage.writeLongString(dos, getBody());
+        XrapMessage.writeHash(dos, getMetadata());
     }
 
     public String toString() {

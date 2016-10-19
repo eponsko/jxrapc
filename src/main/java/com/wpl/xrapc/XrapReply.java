@@ -7,7 +7,7 @@ import java.io.IOException;
 public abstract class XrapReply extends XrapMessage {
     private short statusCode;
 
-    abstract void buildReply(DataOutputStream dos) throws IOException;
+    public abstract void buildReply(DataOutputStream dos) throws IOException;
 
     public String toString() {
         StringBuilder sb = new StringBuilder();

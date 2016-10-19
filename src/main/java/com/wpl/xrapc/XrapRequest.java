@@ -28,7 +28,8 @@ public abstract class XrapRequest extends XrapMessage {
     protected XrapRequest() {
     }
 
-    public static XrapRequest parseRequest(ByteBuffer routeid, ByteBuffer buffer) throws XrapException {
+    public static XrapRequest parseRequest(ByteBuffer routeid, ByteBuffer buffer)
+            throws XrapException {
         XrapRequest rep = parseRequest(buffer);
         rep.setRouteid(routeid);
         return rep;
@@ -129,7 +130,7 @@ public abstract class XrapRequest extends XrapMessage {
         this.resource = resource;
     }
 
-    abstract void buildRequest(DataOutputStream dos) throws IOException;
+    public abstract void buildRequest(DataOutputStream dos) throws IOException;
 
     abstract XrapReply parseResponse(ByteBuffer response) throws XrapException;
 

@@ -47,7 +47,7 @@ public class XrapPostRequest extends XrapRequest {
     }
 
     @Override
-    void buildRequest(DataOutputStream dos) throws IOException {
+    public void buildRequest(DataOutputStream dos) throws IOException {
         dos.writeShort(Constants.SIGNATURE);
         dos.writeByte(Constants.POST_COMMAND);
         dos.writeInt(getRequestId());

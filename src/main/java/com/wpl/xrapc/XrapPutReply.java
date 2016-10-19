@@ -10,7 +10,13 @@ public class XrapPutReply extends XrapReply {
     private long dateModified;
     private NameValuePair[] metadata;
 
-    public XrapPutReply(int requestId, short statusCode, String location, String etag, long dateModified, NameValuePair[] metadata) {
+    public XrapPutReply(
+            int requestId,
+            short statusCode,
+            String location,
+            String etag,
+            long dateModified,
+            NameValuePair[] metadata) {
         setRequestId(requestId);
         setStatusCode(statusCode);
         setLocation(location);
@@ -22,15 +28,15 @@ public class XrapPutReply extends XrapReply {
     public XrapPutReply() {
     }
 
-    void buildReply(DataOutputStream dos) throws IOException {
+    public void buildReply(DataOutputStream dos) throws IOException {
         dos.writeShort(Constants.SIGNATURE);
         dos.writeByte(Constants.PUT_OK_COMMAND);
         dos.writeInt(getRequestId());
         dos.writeShort(getStatusCode());
-        writeString(dos, getLocation());
-        writeString(dos, getEtag());
+        XrapMessage.writeString(dos, getLocation());
+        XrapMessage.writeString(dos, getEtag());
         dos.writeLong(getDateModified());
-        writeHash(dos, getMetadata());
+        XrapMessage.writeHash(dos, getMetadata());
     }
 
     public String getLocation() {
@@ -65,7 +71,6 @@ public class XrapPutReply extends XrapReply {
         this.metadata = metadata;
     }
 
-    ;
 
     public String toString() {
         StringBuilder sb = new StringBuilder();

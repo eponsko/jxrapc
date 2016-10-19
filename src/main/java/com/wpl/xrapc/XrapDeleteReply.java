@@ -16,7 +16,7 @@ public class XrapDeleteReply extends XrapReply {
     public XrapDeleteReply() {
     }
 
-    void buildReply(DataOutputStream dos) throws IOException {
+    public void buildReply(DataOutputStream dos) throws IOException {
         dos.writeShort(Constants.SIGNATURE);
         dos.writeByte(Constants.DELETE_OK_COMMAND);
         dos.writeInt(getRequestId());

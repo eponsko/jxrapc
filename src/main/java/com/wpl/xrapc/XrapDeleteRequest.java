@@ -89,7 +89,7 @@ public class XrapDeleteRequest extends com.wpl.xrapc.XrapRequest {
     }
 
     @Override
-    void buildRequest(DataOutputStream dos) throws IOException {
+    public void buildRequest(DataOutputStream dos) throws IOException {
         dos.writeShort(Constants.SIGNATURE);
         dos.writeByte(Constants.DELETE_COMMAND);
         dos.writeInt(getRequestId());

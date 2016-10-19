@@ -2,11 +2,12 @@
 <project xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns="http://maven.apache.org/POM/4.0.0" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
   <modelVersion>4.0.0</modelVersion>
   <groupId>com.wpl.xrapc</groupId>
-  <artifactId>XrapPeer</artifactId>
-  <version>0.0.2-SNAPSHOT</version>
+  <artifactId>xrappeer</artifactId>
+  <version>0.0.5-SNAPSHOT</version>
   <build>
     <sourceDirectory>src/main/java</sourceDirectory>
     <plugins>
+
       <plugin>
         <artifactId>maven-compiler-plugin</artifactId>
         <version>3.3</version>
@@ -15,6 +16,20 @@
           <target>1.7</target>
         </configuration>
       </plugin>
+<!--
+      <plugin>
+        <groupId>biz.aQute.bnd</groupId>
+        <artifactId>bnd-maven-plugin</artifactId>
+        <version>2.4.1</version>
+        <executions>
+          <execution>
+            <goals>
+              <goal>bnd-process</goal>
+            </goals>
+          </execution>
+        </executions>
+      </plugin>
+-->
       <plugin>
         <groupId>org.codehaus.mojo</groupId>
         <artifactId>exec-maven-plugin</artifactId>
@@ -29,9 +44,11 @@
           </arguments>
         </configuration>
       </plugin>
+
       <plugin>
         <groupId>org.apache.felix</groupId>
         <artifactId>maven-bundle-plugin</artifactId>
+        <version>3.0.1</version>
         <executions>
           <execution>
             <id>bundle-manifest</id>
@@ -42,8 +59,8 @@
           </execution>
         </executions>
       </plugin>
+
       <plugin>
-        <!-- Build an executable JAR -->
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-jar-plugin</artifactId>
         <version>2.4</version>
@@ -51,13 +68,14 @@
           <archive>
             <manifestFile>${project.build.outputDirectory}/META-INF/MANIFEST.MF</manifestFile>
             <manifest>
-              <addClasspath>true</addClasspath>
-              <classpathPrefix>lib/</classpathPrefix>
+<!--              <addClasspath>true</addClasspath>
+              <classpathPrefix>lib/</classpathPrefix> -->
               <mainClass>com.wpl.xrapc.cli.XrapClientShell</mainClass>
             </manifest>
           </archive>
         </configuration>
       </plugin>
+
       <plugin>
         <artifactId>maven-assembly-plugin</artifactId>
         <configuration>
@@ -73,15 +91,14 @@
         <executions>
           <execution>
             <id>make-assembly</id>
-            <!-- this is used for inheritance merges -->
             <phase>package</phase>
-            <!-- bind to the packaging phase -->
             <goals>
               <goal>single</goal>
             </goals>
           </execution>
         </executions>
       </plugin>
+
     </plugins>
   </build>
   <dependencies>
@@ -103,7 +120,7 @@
     <dependency>
       <groupId>org.zeromq</groupId>
       <artifactId>jeromq</artifactId>
-      <version>0.3.2</version>
+      <version>0.3.6</version>
     </dependency>
     <dependency>
       <groupId>org.slf4j</groupId>

@@ -156,7 +156,8 @@ public class XrapMessage {
         return result;
     }
 
-    protected static void writeHash(DataOutputStream dos, NameValuePair[] metadata) throws IOException {
+    protected static void writeHash(DataOutputStream dos, NameValuePair[] metadata)
+            throws IOException {
         if (metadata == null) {
             dos.writeInt(0);
         } else {
@@ -231,7 +232,8 @@ public class XrapMessage {
         return response;
     }
 
-    protected void writeParameter(DataOutputStream dos, XrapGetRequest.Parameter p) throws IOException {
+    protected void writeParameter(DataOutputStream dos, XrapGetRequest.Parameter p)
+            throws IOException {
         writeString(dos, p.getName());
         if (p.isBinary()) {
             writeLongString(dos, p.getBinaryValue());

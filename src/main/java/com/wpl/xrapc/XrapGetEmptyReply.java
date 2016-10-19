@@ -12,9 +12,7 @@ public class XrapGetEmptyReply extends XrapReply {
     public XrapGetEmptyReply() {
     }
 
-    ;
-
-    void buildReply(DataOutputStream dos) throws IOException {
+    public void buildReply(DataOutputStream dos) throws IOException {
         dos.writeShort(Constants.SIGNATURE);
         dos.writeByte(Constants.GET_EMPTY_COMMAND);
         dos.writeInt(getRequestId());

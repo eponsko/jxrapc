@@ -217,7 +217,7 @@ public class XrapGetRequest extends XrapRequest {
         return Collections.unmodifiableList(parameters);
     }
 
-    void buildRequest(DataOutputStream dos) throws IOException {
+    public void buildRequest(DataOutputStream dos) throws IOException {
         dos.writeShort(Constants.SIGNATURE);
         dos.writeByte(Constants.GET_COMMAND);
         dos.writeInt(getRequestId());
