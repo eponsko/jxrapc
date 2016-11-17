@@ -1,25 +1,38 @@
 package com.wpl.xrapc;
 
+import com.google.gson.JsonIOException;
+import com.google.gson.JsonSyntaxException;
+import com.googlecode.concurrenttrees.common.KeyValuePair;
 import com.googlecode.concurrenttrees.radix.ConcurrentRadixTree;
 import com.googlecode.concurrenttrees.radix.RadixTree;
 import com.googlecode.concurrenttrees.radix.node.concrete.DefaultCharArrayNodeFactory;
+import org.reflections.Reflections;
+import org.reflections.scanners.*;
+import org.reflections.util.ClasspathHelper;
+import org.reflections.util.ConfigurationBuilder;
+import org.reflections.util.FilterBuilder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.zeromq.ZContext;
 import org.zeromq.ZMQ;
 
+import javax.ws.rs.*;
+import javax.ws.rs.core.Response;
 import java.io.ByteArrayOutputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
+import java.lang.annotation.Annotation;
+import java.lang.reflect.*;
 import java.nio.ByteBuffer;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.Future;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
+import java.util.*;
+import java.util.concurrent.*;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+import java.util.stream.Collectors;
+
+
 
 /**
  * A general purpose client for the XRAP protocol.
@@ -49,7 +62,11 @@ public class XrapPeer implements Runnable {
     private Logger log;
     private int signalId, routerId, dealerId, pubId, subId, pushId, pullId;
     private boolean terminate = false;
-
+    private RadixTree<IXrap> registeredClasses;
+    private HashMap<Method, Pattern> urlPatterns;
+    enum callType {JAXRS, RESOURCE};
+    callType type = callType.RESOURCE;
+    JSON json = new JSON();
     /**
      * Creates a new XrapClient object using a newly created ZMQ context.
      *
@@ -62,24 +79,29 @@ public class XrapPeer implements Runnable {
         this.port = port;
         this.isServer = isServer;
         routeTrie = new ConcurrentRadixTree<>(new DefaultCharArrayNodeFactory());
+        registeredClasses = new ConcurrentRadixTree<>(new DefaultCharArrayNodeFactory());
+        urlPatterns = new HashMap<>();
         XrapResource handler = new XrapResource();
         addHandler(handler);
+        type = callType.RESOURCE;
     }
 
     public void addHandler(XrapResourceService handler) {
         log.info("Registering route " + handler.getRoute() + " with handler : " + handler.getClass());
         routeTrie.put(handler.getRoute(), handler);
-
+        type = callType.RESOURCE;
     }
-    private synchronized void setReady(){
+
+
+    private synchronized void setReady() {
         ready = true;
         notifyAll();
     }
 
-    public synchronized void waitUntilReady(){
+    public synchronized void waitUntilReady() {
         log.warn("waitUntilReady called..");
         try {
-            while(!ready){
+            while (!ready) {
                 wait();
             }
         } catch (InterruptedException e) {
@@ -87,14 +109,13 @@ public class XrapPeer implements Runnable {
         }
         log.warn("waitUntilReady done!");
     }
-    
 
- 
 
- public void delHandler(XrapResourceService handler) {
+    public void delHandler(XrapResourceService handler) {
         log.info("Registering route " + handler.getRoute() + " with handler : " + handler.getClass());
         routeTrie.remove(handler.getRoute());
     }
+
     public void terminate() {
         terminate = true;
         //ZMQ.Socket sendsig = ctx.socket(ZMQ.REQ);
@@ -144,6 +165,7 @@ public class XrapPeer implements Runnable {
         }
         return response;
     }
+
     public XrapReply send(ByteBuffer address, XrapRequest request) throws XrapException, InterruptedException {
         sendOnly(address, request);
         XrapReply response = getResponse(request, receiveTimeout, receiveTimeoutUnit);
@@ -152,6 +174,7 @@ public class XrapPeer implements Runnable {
         }
         return response;
     }
+
     private void sendReply(ZMQ.Socket sock, XrapReply rep) throws XrapException {
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         DataOutputStream dos = new DataOutputStream(baos);
@@ -208,6 +231,7 @@ public class XrapPeer implements Runnable {
             }
         }
     }
+
     public void sendAll(XrapRequest request) throws XrapException {
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         DataOutputStream dos = new DataOutputStream(baos);
@@ -491,7 +515,7 @@ public class XrapPeer implements Runnable {
                     if (items.pollin(subId)) {
                         log.debug("Sub socket got message");
                         byte[] topic = sockSub.recv();
-                        if(!new String(topic).equals("all")){
+                        if (!new String(topic).equals("all")) {
                             log.warn("Got subscription with strange topic: " + new String(topic));
                         }
                         byte[] responseBytes = sockSub.recv();
@@ -541,11 +565,21 @@ public class XrapPeer implements Runnable {
         ctx.destroy();
     }
 
+
     private XrapReply handleRequest(XrapMessage msg) {
-        XrapReply rep =
-                new XrapErrorReply(msg.getRequestId(), Constants.BadRequest_400, "Malformed message");
-        if (msg instanceof XrapReply) {
-            log.info("handleRequest: got REPLY message: \n" + msg.toString() + "\n");
+        XrapReply rep = new XrapErrorReply(msg.getRequestId(), Constants.BadRequest_400, "Malformed message");
+        rep.setRouteid(msg.getRouteid());
+        if(type == callType.JAXRS) {
+            if (msg instanceof XrapReply) {
+                log.info("handleRequest: got REPLY message: \n" + msg.toString() + "\n");
+            } else if (msg instanceof XrapRequest) {
+                XrapReply reppy = callJAXRS((XrapRequest) msg);
+                if (reppy != null) {
+                    rep = reppy;
+                }
+            } else {
+                log.error("unknown XrapMessage type!");
+            }
         } else {
             XrapResourceService handle = findHandler(msg);
             if (msg instanceof XrapGetRequest) {
@@ -558,9 +592,11 @@ public class XrapPeer implements Runnable {
                 rep = handle.DELETE((XrapDeleteRequest) msg);
             }
         }
+
         log.info("handleRequest, replying with:\n" + rep.toString());
         return rep;
     }
+
 
     private XrapResourceService trieLookup(String location) {
         // first check for perfect match
@@ -594,6 +630,483 @@ public class XrapPeer implements Runnable {
 
         return handler;
     }
+
+
+    public void registerJAXRS(String packageToAdd, Object parent) {
+        type = callType.JAXRS;
+        log.debug("Looking for classes annotated with @Path");
+
+        Reflections reflections = new Reflections(new ConfigurationBuilder()
+                .setUrls(ClasspathHelper.forPackage(packageToAdd))
+                .filterInputsBy(new FilterBuilder().includePackage(packageToAdd))
+                .setScanners(
+                        new SubTypesScanner(false),
+                        new TypeAnnotationsScanner(),
+                        new FieldAnnotationsScanner(),
+                        new MethodAnnotationsScanner(),
+                        new MethodParameterScanner(),
+                        new MethodParameterNamesScanner(),
+                        new MemberUsageScanner()));
+
+        Set<Class<?>> annotated = reflections.getTypesAnnotatedWith(javax.ws.rs.Path.class);
+        log.info("Found " + annotated.size() + " types annotated with @Path");
+        for (Class c : annotated) {
+            Annotation annotation = c.getDeclaredAnnotation(Path.class);
+            javax.ws.rs.Path p = (Path) annotation;
+            String rootUri = p.value();
+            log.info(rootUri + " is handled by " + c.getName());
+            for (Method met : c.getMethods()) {
+                Annotation[] an = met.getDeclaredAnnotations();
+                if (an.length > 0) {
+                    Path pathA = met.getDeclaredAnnotation(Path.class);
+                    String subPath = "";
+                    String type = "unknown";
+
+                    if (pathA != null)
+                        subPath = pathA.value();
+
+                    String regex = regexFromPath(subPath);
+                    log.info("associating regex " + regex + " with " + met.getName());
+                    Pattern pattern = Pattern.compile(regex);
+                    urlPatterns.put(met, pattern);
+                    if (met.getAnnotation(DELETE.class) != null) {
+                        type = "DELETE";
+                    } else if (met.getAnnotation(PUT.class) != null) {
+                        type = "PUT";
+                    } else if (met.getAnnotation(POST.class) != null) {
+                        type = "POST";
+                    } else if (met.getAnnotation(GET.class) != null) {
+                        type = "GET";
+                    }
+                    log.info("    " + type + " " + rootUri + subPath + " -> " + met.getName());
+                    Annotation[][] pan = met.getParameterAnnotations();
+                    for (Annotation[] apa : pan) {
+                        log.info("param annot: " + Arrays.toString(apa));
+                    }
+
+                    //updateOperationLog("    " + met.getName() + " annotated with " + Arrays.toString(an));
+                }
+            }
+            try {
+                // TODO: this looks scary..
+                Class myClass = Class.forName(c.getName(), true, getClass().getClassLoader());
+                Constructor constructor = myClass.getConstructor();
+                Object instance = constructor.newInstance();
+                log.info("instatiated class " + instance);
+
+                if (instance instanceof IXrap) {
+                    IXrap xac = (IXrap) instance;
+                    log.info("Setting parent..");
+                    xac.setParent(parent);
+                    registeredClasses.put(rootUri, xac);
+                } else {
+                    log.warn("Not a IXrap instance!");
+                    instance = null;
+                }
+            } catch (ClassNotFoundException e) {
+                log.error("Could not instantiate " + c.getName());
+                log.error(e.toString());
+            } catch (NoSuchMethodException e) {
+                log.error("Could not instantiate " + c.getName());
+                log.error(e.toString());
+            } catch (IllegalAccessException e) {
+                log.error("Could not instantiate " + c.getName());
+                log.error(e.toString());
+            } catch (InstantiationException e) {
+                log.error("Could not instantiate " + c.getName());
+                log.error(e.toString());
+            } catch (InvocationTargetException e) {
+                log.error("Could not instantiate " + c.getName());
+                log.error(e.toString());
+                log.error(e.getCause().getMessage());
+            }
+        }
+        printRegistered();
+    }
+
+    void printRegistered() {
+        Iterable<KeyValuePair<IXrap>> clss = registeredClasses.getKeyValuePairsForKeysStartingWith("");
+        for (KeyValuePair<IXrap> registered : clss) {
+            log.debug("Registered URI: " + registered.getKey() + " class: " + registered.getValue().getClass().getName());
+        }
+    }
+
+
+    private IXrap trieLookupRS(String location) {
+        // first check for perfect match
+        IXrap res = registeredClasses.getValueForExactKey(location);
+        if (res != null) {
+            return res;
+        }
+        // Check for closest match, return first
+        for (IXrap r : registeredClasses.getValuesForClosestKeys(location)) {
+            return r;
+        }
+        // finally, look for default
+        return null;
+    }
+
+    private Method[] getTypeMethods(IXrap found, Class type) {
+        ArrayList<Method> matching = new ArrayList<>();
+        Method[] methods = found.getClass().getMethods();
+
+        for (Method met : methods) {
+            if (met.getAnnotation(type) != null) {
+                matching.add(met);
+            }
+        }
+        Method[] methods1 = new Method[matching.size()];
+        methods1 = matching.toArray(methods1);
+        return methods1;
+    }
+
+
+    // path = "/{linkId}/" -> ""/(?<linkId>[a-zA-Z][a-zA-Z0-9_-]*)/"
+    private String regexFromPath(String path) {
+        path = path.replace("{", "(?<");
+        path = path.replace("}", ">[a-zA-Z][a-zA-Z0-9_-]*)");
+        return path;
+    }
+
+    private XrapReply callJAXRS(XrapRequest message) { //Class type, String uri, String body){
+        Class type = null;
+        String uri = null;
+        String body = "";
+        if (message instanceof XrapGetRequest) {
+            uri = message.getResource();
+            type = GET.class;
+        } else if (message instanceof XrapPutRequest) {
+            uri = message.getResource();
+            // TODO: assumes its string data, should check content type.
+            body = new String(((XrapPutRequest) message).getContentBody());
+            type = PUT.class;
+        } else if (message instanceof XrapPostRequest) {
+            uri = message.getResource();
+            // TODO: assumes its string data, should check content type.
+            body = new String(((XrapPostRequest) message).getContentBody());
+            type = POST.class;
+        } else if (message instanceof XrapDeleteRequest) {
+            uri = message.getResource();
+            type = DELETE.class;
+        }
+        if (type == null) {
+            log.error("Unknow XrapRequest type!");
+            return null;
+        }
+
+        log.debug("callJAXRS(" + type.getName() + ", " + uri + " ," + body + ")");
+
+        IXrap apiClass = trieLookupRS(uri);
+        if (apiClass == null) {
+            log.error("Could not find handler for " + type + " " + uri);
+            // TODO: generate error response
+            return null;
+        }
+        String rootURL = null;
+        Path pathAnnotation = apiClass.getClass().getAnnotation(Path.class);
+        if (pathAnnotation == null) {
+            log.error("Could not find root URI for " + apiClass.getClass().getName());
+            // TODO: generate error response
+            return null;
+        }
+        rootURL = pathAnnotation.value();
+        String strippedUri = uri.replace(rootURL, "");
+        log.debug("Stripped URI: " + strippedUri);
+        Method[] matchingMethods = getTypeMethods(apiClass, type);
+        if (matchingMethods.length == 0) {
+            log.error("No matching methods, generate an error response");
+            // TODO: generate error response here
+            return null;
+        }
+        for (Method candidateMethod : matchingMethods) {
+            log.debug("Matching methods: " + candidateMethod.getName());
+
+            // check that it actually returns a response
+            if (candidateMethod.getReturnType() != Response.class) {
+                log.error("registered method " + candidateMethod.getName() + " returns " + candidateMethod.getReturnType().getName());
+                log.error("when it should return javax.ws.rs.Response!");
+                continue;
+            }
+
+
+            Path pathA = candidateMethod.getDeclaredAnnotation(Path.class);
+            String subPath = "";
+            if (pathA != null)
+                subPath = pathA.value();
+
+
+            String completeURL = rootURL + subPath;
+            log.debug("TotalURL :" + regexFromPath(completeURL));
+
+            Pattern regex = urlPatterns.get(candidateMethod);
+            if (regex == null) {
+                log.error("Could not find regex pattern for " + candidateMethod.getName());
+                continue;
+            }
+            Matcher matcher = regex.matcher(strippedUri);
+            if (!matcher.matches()) {
+                log.debug("No regex match for " + candidateMethod.getName() + ", trying next..");
+                continue;
+            }
+            // We've found the method we should call, prepare the arguments
+            int numParams = candidateMethod.getParameterCount();
+            // no parameters, call directly
+            Object[] invokeParams;
+            ArrayList<Object> paramList = new ArrayList<>();
+            if (numParams > 0) {
+                Parameter[] methodParameters = candidateMethod.getParameters();
+                int groupIndex = 1;
+                for (Parameter param : methodParameters) {
+                    // Path parameter, get from matcher
+                    PathParam pp = param.getDeclaredAnnotation(PathParam.class);
+                    if (pp != null) {
+                        String pathParam = matcher.group(groupIndex);
+                        groupIndex++;
+                        // Should we cast it
+
+                        Object castObject = castParameter(pathParam, param.getParameterizedType());
+                        if (castObject == null) {
+                            log.error("Could not cast path parameter! ");
+                            return null;
+                        }
+                        paramList.add(castObject);
+                    }
+                    // Query parameter, get from XrapMsg..
+                    else if (param.getDeclaredAnnotation(QueryParam.class) != null) {
+                        log.error("Query Parameter, not handled! " + param.getName());
+                        return null;
+                        // TODO: error handling
+                    } else {
+                        Object castObject = castParameter(body, param.getParameterizedType());
+                        if (castObject == null) {
+                            log.error("Could not cast body parameter!");
+                            return null;
+                        }
+                        paramList.add(castObject);
+                    }
+                }
+            }
+
+            invokeParams = new Object[paramList.size()];
+            invokeParams = paramList.toArray(invokeParams);
+            try {
+                log.info("Invoking method " + candidateMethod.getName());
+              /*  log.info("With parameters " + Arrays.toString(invokeParams));*/
+                Response response = (Response) candidateMethod.invoke(apiClass, invokeParams);
+                /*log.info("#########################");
+                log.info(response.toString());
+                if (response.hasEntity()) {
+                    log.info("Body: " + response.getEntity());
+                }
+                log.info("#########################");
+                */
+                return responseToXrapReply(message, response);
+            } catch (IllegalAccessException e) {
+                log.error("Couid not invoke method! ");
+                log.info("With parameters " + Arrays.toString(invokeParams));
+                log.error(e.toString());
+                return null;
+                // TODO: error message..
+            } catch (InvocationTargetException e) {
+                log.error("Couid not invoke method! ");
+                log.info("With parameters " + Arrays.toString(invokeParams));
+                log.error(e.toString());
+                log.error(e.getCause().getMessage());
+                return null;
+                // TODO: error message..
+            }
+        }
+        return null;
+        // TODO: error message
+    }
+
+    private Object castParameter(String paramData, Type type) {
+
+        if (type == String.class) {
+            return paramData;
+        } else if (type == Long.class) {
+            return Long.getLong(paramData);
+        } else if (type == Double.class) {
+            return Double.parseDouble(paramData);
+        } else if (type == Integer.class) {
+            return Integer.parseInt(paramData);
+        } else {
+            try {
+                Object parsedJson = json.deserialize(paramData, type);
+/*
+                log.warn("Deserialized JSON: " + paramData);
+                log.warn("Resulting object: " + parsedJson.getClass().getName());
+                log.warn("Result: " + parsedJson.toString());
+   */
+                return parsedJson;
+            } catch (JsonIOException e) {
+                log.error("Couldn't convert parameter " + paramData + " to type " + type.getTypeName());
+                log.error("Could not parse JSON ");
+                log.error(e.toString());
+                return null;
+            } catch (JsonSyntaxException e) {
+                log.error("Couldn't convert parameter " + paramData + " to type " + type.getTypeName());
+                log.error("Could not parse JSON ");
+                log.error(e.toString());
+                return null;
+            }
+        }
+    }
+
+    /*private Object castParameterType(String paramData, Type type) {
+
+        if (type == String.class) {
+            return paramData;
+        } else if (type == Long.class) {
+            return Long.getLong(paramData);
+        } else if (type == Double.class) {
+            return Double.parseDouble(paramData);
+        } else if (type == Integer.class) {
+            return Integer.parseInt(paramData);
+        } else {
+            try {
+                Object parsedJson = json.deserialize(paramData, type);
+                log.warn("Deserialized JSON: " + paramData);
+                log.warn("Resulting object: " + parsedJson.getClass().getName());
+                log.warn("Result: " + parsedJson.toString());
+                return parsedJson;
+            } catch (JsonIOException e) {
+                log.error("Couldn't convert parameter " + paramData + " to type " + type.getName());
+                log.error("Could not parse JSON ");
+                log.error(e.toString());
+                return null;
+            } catch (JsonSyntaxException e) {
+                log.error("Couldn't convert parameter " + paramData + " to type " + type.getName());
+                log.error("Could not parse JSON ");
+                log.error(e.toString());
+                return null;
+            }
+        }
+    }*/
+
+    // Convert a JAX-RS response to XrapReply
+    private XrapReply responseToXrapReply(XrapMessage message, Response response) {
+        if (response == null) {
+            XrapErrorReply xer = new XrapErrorReply(message.getRequestId(), (short) 400, "Could not process request");
+            xer.setRouteid(message.getRouteid());
+            return xer;
+        }
+
+        // Treat anything over 200 as an error
+        if (response.getStatus() > 299) {
+            XrapErrorReply xer = new XrapErrorReply(message.getRequestId(), (short) response.getStatus(), response.getStatusInfo().getReasonPhrase());
+            xer.setRouteid(message.getRouteid());
+            return xer;
+        }
+        if (message instanceof XrapGetRequest) {
+            XrapGetReply reply = new XrapGetReply();
+            reply.setRouteid(message.getRouteid());
+            reply.setRequestId(message.getRequestId());
+            reply.setStatusCode((short) response.getStatus());
+            if (response.hasEntity()) {
+                reply.setBody(response.getEntity().toString().getBytes());
+            } else {
+                reply.setBody("".getBytes());
+            }
+            if (response.getMediaType() != null) {
+                reply.setContentType(response.getMediaType().toString());
+            } else {
+                // Default to json
+                reply.setContentType("application/json");
+            }
+
+            if (response.getLastModified() != null) {
+                reply.setDateModified(response.getLastModified().getTime());
+            } else {
+                // default to 'now'
+                reply.setDateModified(new Date().getTime());
+            }
+            if (response.getEntityTag() != null) {
+                reply.setEtag(response.getEntityTag().getValue());
+            } else if (response.hasEntity()) {
+                // put the hashcode if nothing else
+                reply.setEtag(Integer.toString(response.getEntity().hashCode()));
+            }
+            List<NameValuePair> metadata = new ArrayList<>();
+            for (String key : response.getMetadata().keySet()) {
+                metadata.add(new NameValuePair(key, response.getMetadata().get(key).toString()));
+            }
+            NameValuePair metadata1[] = new NameValuePair[metadata.size()];
+            metadata1 = metadata.toArray(metadata1);
+            reply.setMetadata(metadata1);
+            return reply;
+        } else if (message instanceof XrapPostRequest) {
+            XrapPostReply reply = new XrapPostReply();
+            reply.setRouteid(message.getRouteid());
+            reply.setRequestId(message.getRequestId());
+            reply.setStatusCode((short) response.getStatus());
+            if (response.hasEntity()) {
+                reply.setBody(response.getEntity().toString().getBytes());
+            } else {
+                reply.setBody("".getBytes());
+            }
+            if (response.getMediaType() != null)
+                reply.setContentType(response.getMediaType().toString());
+
+            if (response.getLastModified() != null) {
+                reply.setDateModified(response.getLastModified().getTime());
+            } else {
+                // default to 'now'
+                reply.setDateModified(new Date().getTime());
+            }
+            if (response.getEntityTag() != null) {
+                reply.setEtag(response.getEntityTag().getValue());
+            } else if (response.hasEntity()) {
+                // put the hashcode if nothing else
+                reply.setEtag(Integer.toString(response.getEntity().hashCode()));
+            }
+            List<NameValuePair> metadata = response.getMetadata().keySet().stream().map(
+                    key -> new NameValuePair(key, response.getMetadata().get(key).toString())).collect(Collectors.toList());
+            NameValuePair metadata1[] = new NameValuePair[metadata.size()];
+            metadata1 = metadata.toArray(metadata1);
+            reply.setMetadata(metadata1);
+            return reply;
+        } else if (message instanceof XrapPutRequest) {
+            XrapPutReply reply = new XrapPutReply();
+            reply.setRouteid(message.getRouteid());
+            reply.setRequestId(message.getRequestId());
+            reply.setStatusCode((short) response.getStatus());
+            if (response.getLastModified() != null) {
+                reply.setDateModified(response.getLastModified().getTime());
+            } else {
+                // default to 'now'
+                reply.setDateModified(new Date().getTime());
+            }
+            if (response.getEntityTag() != null) {
+                reply.setEtag(response.getEntityTag().getValue());
+            } else if (response.hasEntity()) {
+                // put the hashcode if nothing else
+                reply.setEtag(Integer.toString(response.getEntity().hashCode()));
+            }
+            List<NameValuePair> metadata = response.getMetadata().keySet().stream().map(
+                    key -> new NameValuePair(key, response.getMetadata().get(key).toString())).collect(Collectors.toList());
+            NameValuePair metadata1[] = new NameValuePair[metadata.size()];
+            metadata1 = metadata.toArray(metadata1);
+            reply.setMetadata(metadata1);
+            return reply;
+        } else if (message instanceof XrapDeleteRequest) {
+            XrapDeleteReply reply = new XrapDeleteReply();
+            reply.setRouteid(message.getRouteid());
+            reply.setRequestId(message.getRequestId());
+            reply.setStatusCode((short) response.getStatus());
+            List<NameValuePair> metadata = response.getMetadata().keySet().stream().map(
+                    key -> new NameValuePair(key, response.getMetadata().get(key).toString())).collect(Collectors.toList());
+            NameValuePair metadata1[] = new NameValuePair[metadata.size()];
+            metadata1 = metadata.toArray(metadata1);
+            reply.setMetadata(metadata1);
+            return reply;
+        }
+
+        XrapErrorReply xer = new XrapErrorReply(message.getRequestId(), (short) 400, "Could not process request");
+        xer.setRouteid(message.getRouteid());
+        return xer;
+    }
+
 
     private class FutureReply implements Future<XrapReply> {
         private XrapRequest request;
