@@ -263,6 +263,47 @@ public class XrapPeer implements Runnable {
         }
     }
 
+    public XrapReply sendAny(XrapRequest request) throws XrapException {
+        if (!isServer) {
+            throw new XrapException("Client cannot send to any!");
+        }
+
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        DataOutputStream dos = new DataOutputStream(baos);
+        try {
+            request.buildRequest(dos);
+        } catch (IOException ex) {
+            // shouldn't occur when writing to a ByteArrayOutputStream?
+            throw new XrapException("Exception when building request");
+        }
+        try {
+            lock.lock();
+            log.debug("sockPush is: " + sockPub);
+            sockPush.send(baos.toByteArray(), 0);
+        } finally {
+            lock.unlock();
+        }
+
+        int count = 0;
+        int maxTries = 3;
+        while(true) {
+            try {
+                XrapReply response = getResponse(request, receiveTimeout, receiveTimeoutUnit);
+                if (response == null) {
+                    throw new XrapException("Timeout");
+                }
+                return response;
+            } catch (InterruptedException ex) {
+                if(++count == maxTries){
+                    log.error("getResponse was interrupted " + maxTries + " times, returning null.");
+                    return null;
+                }
+
+            }
+        }
+    }
+
+
 
     private void sendOnly(ByteBuffer address, XrapRequest request) throws XrapException {
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
@@ -526,7 +567,7 @@ public class XrapPeer implements Runnable {
                         if (sockSub.hasReceiveMore()) {
                             log.warn("sockSub hasRecieveMore\n");
                         }
-                        log.debug("Recieved data, len: " + responseBytes.length);
+                        log.info("Recieved sub data, len: " + responseBytes.length);
                         if (responseBytes.length > 0) {
                             XrapMessage msg = XrapMessage.parseRequest(ByteBuffer.wrap(responseBytes));
                             if (msg instanceof XrapReply) {
@@ -538,14 +579,39 @@ public class XrapPeer implements Runnable {
                                     responseCache.notify();
                                 }
                             } else {
-                                log.debug("Client got a request: \n" + msg.toString());
+                                log.info("Client got a request: \n" + msg.toString());
                                 XrapReply rep = handleRequest(msg);
-                                //sendReply(sockDealer, rep);
+                                sendReply(sockDealer, rep);
                             }
                         }
                     }
                     if (items.pollin(pullId)) {
                         log.warn("Pull socket got message");
+                        byte[] responseBytes = sockPull.recv();
+                        if (responseBytes == null) {
+                            log.warn("Got null from sockPull.recv()!");
+                            continue;
+                        }
+                        if (sockPull.hasReceiveMore()) {
+                            log.warn("sockPull hasRecieveMore\n");
+                        }
+                        log.info("Recieved PUSH/PULL data, len: " + responseBytes.length);
+                        if (responseBytes.length > 0) {
+                            XrapMessage msg = XrapMessage.parseRequest(ByteBuffer.wrap(responseBytes));
+                            if (msg instanceof XrapReply) {
+                                log.debug("Client got a XrapReply! Putting in the reply buffer..");
+
+                                responseCache.put(msg.getRequestId(), (XrapReply) msg);
+                                // notify any thread waiting for new messages
+                                synchronized (responseCache) {
+                                    responseCache.notify();
+                                }
+                            } else {
+                                log.info("Client got a request: \n" + msg.toString());
+                                XrapReply rep = handleRequest(msg);
+                                sendReply(sockDealer, rep);
+                            }
+                        }
                     }
                     if (items.pollin(signalId)) {
                         log.warn("Got signal, aborting!");
@@ -571,8 +637,9 @@ public class XrapPeer implements Runnable {
         rep.setRouteid(msg.getRouteid());
         if(type == callType.JAXRS) {
             if (msg instanceof XrapReply) {
-                log.info("handleRequest: got REPLY message: \n" + msg.toString() + "\n");
+                log.info("handleRequest JAXRS: got REPLY message: \n" + msg.toString() + "\n");
             } else if (msg instanceof XrapRequest) {
+                log.info("handleRequest JAXRS: calling callJAXRS");
                 XrapReply reppy = callJAXRS((XrapRequest) msg);
                 if (reppy != null) {
                     rep = reppy;
@@ -581,6 +648,7 @@ public class XrapPeer implements Runnable {
                 log.error("unknown XrapMessage type!");
             }
         } else {
+            log.info("handleRequest XrapResource");
             XrapResourceService handle = findHandler(msg);
             if (msg instanceof XrapGetRequest) {
                 rep = handle.GET((XrapGetRequest) msg);
@@ -791,7 +859,7 @@ public class XrapPeer implements Runnable {
         }
         if (type == null) {
             log.error("Unknow XrapRequest type!");
-            return null;
+            return new XrapErrorReply(message.getRequestId(),(short) 404, "Unknown XrapRequest type");
         }
 
         log.debug("callJAXRS(" + type.getName() + ", " + uri + " ," + body + ")");
@@ -799,15 +867,13 @@ public class XrapPeer implements Runnable {
         IXrap apiClass = trieLookupRS(uri);
         if (apiClass == null) {
             log.error("Could not find handler for " + type + " " + uri);
-            // TODO: generate error response
-            return null;
+            return new XrapErrorReply(message.getRequestId(),(short) 404, "Could not find handler for "+ uri);
         }
         String rootURL = null;
         Path pathAnnotation = apiClass.getClass().getAnnotation(Path.class);
         if (pathAnnotation == null) {
             log.error("Could not find root URI for " + apiClass.getClass().getName());
-            // TODO: generate error response
-            return null;
+            return new XrapErrorReply(message.getRequestId(),(short) 404, "Could not find root URI for " + apiClass.getClass().getName());
         }
         rootURL = pathAnnotation.value();
         String strippedUri = uri.replace(rootURL, "");
@@ -815,8 +881,7 @@ public class XrapPeer implements Runnable {
         Method[] matchingMethods = getTypeMethods(apiClass, type);
         if (matchingMethods.length == 0) {
             log.error("No matching methods, generate an error response");
-            // TODO: generate error response here
-            return null;
+            return new XrapErrorReply(message.getRequestId(),(short) 404, "No matching methods in " + apiClass.toString());
         }
         for (Method candidateMethod : matchingMethods) {
             log.debug("Matching methods: " + candidateMethod.getName());
@@ -827,7 +892,6 @@ public class XrapPeer implements Runnable {
                 log.error("when it should return javax.ws.rs.Response!");
                 continue;
             }
-
 
             Path pathA = candidateMethod.getDeclaredAnnotation(Path.class);
             String subPath = "";
@@ -867,20 +931,20 @@ public class XrapPeer implements Runnable {
                         Object castObject = castParameter(pathParam, param.getParameterizedType());
                         if (castObject == null) {
                             log.error("Could not cast path parameter! ");
-                            return null;
+                            return new XrapErrorReply(message.getRequestId(),(short) 404, "could not cast path parameter " + pathParam);
+
                         }
                         paramList.add(castObject);
                     }
                     // Query parameter, get from XrapMsg..
                     else if (param.getDeclaredAnnotation(QueryParam.class) != null) {
                         log.error("Query Parameter, not handled! " + param.getName());
-                        return null;
-                        // TODO: error handling
+                        return new XrapErrorReply(message.getRequestId(),(short) 404, "Query parameter. not handled " + param.toString());
                     } else {
                         Object castObject = castParameter(body, param.getParameterizedType());
                         if (castObject == null) {
                             log.error("Could not cast body parameter!");
-                            return null;
+                            return new XrapErrorReply(message.getRequestId(),(short) 404, "Could not cast body parameter to type " + param.getParameterizedType().toString());
                         }
                         paramList.add(castObject);
                     }
@@ -905,19 +969,19 @@ public class XrapPeer implements Runnable {
                 log.error("Couid not invoke method! ");
                 log.info("With parameters " + Arrays.toString(invokeParams));
                 log.error(e.toString());
-                return null;
-                // TODO: error message..
+                return new XrapErrorReply(message.getRequestId(),(short) 404, "Could not invoke method " + e.toString());
+
             } catch (InvocationTargetException e) {
                 log.error("Couid not invoke method! ");
                 log.info("With parameters " + Arrays.toString(invokeParams));
                 log.error(e.toString());
                 log.error(e.getCause().getMessage());
-                return null;
-                // TODO: error message..
+                return new XrapErrorReply(message.getRequestId(),(short) 404, "Could not invoke method " + e.toString());
+
             }
         }
-        return null;
-        // TODO: error message
+        return new XrapErrorReply(message.getRequestId(),(short) 404, "Could not find mathcing methods!");
+
     }
 
     private Object castParameter(String paramData, Type type) {
@@ -1004,7 +1068,18 @@ public class XrapPeer implements Runnable {
             reply.setRequestId(message.getRequestId());
             reply.setStatusCode((short) response.getStatus());
             if (response.hasEntity()) {
-                reply.setBody(response.getEntity().toString().getBytes());
+                // Should convert to JSON if possible
+                Object ent = response.getEntity();
+                if(ent instanceof String){
+                    reply.setBody(((String) ent).getBytes());
+                } else {
+                    String bodystr = json.serialize(response.getEntity());
+                    if (bodystr != null) {
+                        reply.setBody(bodystr.getBytes());
+                    } else {
+                        log.error("Could not serialize body " + ent);
+                    }
+                }
             } else {
                 reply.setBody("".getBytes());
             }
@@ -1041,7 +1116,18 @@ public class XrapPeer implements Runnable {
             reply.setRequestId(message.getRequestId());
             reply.setStatusCode((short) response.getStatus());
             if (response.hasEntity()) {
-                reply.setBody(response.getEntity().toString().getBytes());
+                // Should convert to JSON if possible
+                Object ent = response.getEntity();
+                if(ent instanceof String){
+                    reply.setBody(((String) ent).getBytes());
+                } else {
+                    String bodystr = json.serialize(response.getEntity());
+                    if (bodystr != null) {
+                        reply.setBody(bodystr.getBytes());
+                    } else {
+                        log.error("Could not serialize body " + ent);
+                    }
+                }
             } else {
                 reply.setBody("".getBytes());
             }
