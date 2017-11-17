@@ -832,7 +832,7 @@ public class XrapPeer implements Runnable {
     // path = "/{linkId}/" -> ""/(?<linkId>[a-zA-Z][a-zA-Z0-9_-]*)/"
     private String regexFromPath(String path) {
         path = path.replace("{", "(?<");
-        path = path.replace("}", ">[a-zA-Z][a-zA-Z0-9_-]*)");
+        path = path.replace("}", ">[a-zA-Z0-9_-][a-zA-Z0-9_-]*)");
         return path;
     }
 
@@ -974,9 +974,10 @@ public class XrapPeer implements Runnable {
             } catch (InvocationTargetException e) {
                 log.error("Couid not invoke method! ");
                 log.info("With parameters " + Arrays.toString(invokeParams));
+                e.printStackTrace();
                 log.error(e.toString());
                 log.error(e.getCause().getMessage());
-                return new XrapErrorReply(message.getRequestId(),(short) 404, "Could not invoke method " + e.toString());
+                return new XrapErrorReply(message.getRequestId(),(short) 404, "Could not invoke method " + e.getTargetException().getMessage());
 
             }
         }
